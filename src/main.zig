@@ -14,7 +14,13 @@ pub fn main(init: std.process.Init) !void {
 
     const pckgs_list = try parse.get_pckgs_list(io, aloc);
     for(pckgs_list.items, 0..) |pckg, i| {
-        std.debug.print("[{d}] Package: {s}\n", .{i, pckg.name});
+        std.debug.print("[{d}] Package: {s} | Deps: ", .{i, pckg.name});
+
+        for(pckg.deps) |dep_id| {
+            std.debug.print("{s} ", .{pckgs_list.items[dep_id].name});
+        }
+
+        std.debug.print("\n", .{});
     }
 }
 

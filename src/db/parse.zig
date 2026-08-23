@@ -135,6 +135,70 @@ fn parse_pckg(io: std.Io, arena: std.mem.Allocator ,file: *std.Io.File, pak: *pc
     pak.provides = try arena.dupe([]const u8, provides_buf.items);
 }
 
+/// Sorts the pckgs_lsit in place
+///
+/// **Arguments**
+/// - `list`: A pointer to the list of installed packages.
+///
+/// **Returns**
+/// Nothing or an error.
+fn sort_pckgs_list(list: *std.ArrayList(pckg)) !void {
+
+    std.mem.sort(pckg, list.items, {}, struct {
+        fn lessThan(_: void, a: pckg, b: pckg) bool {
+            return std.mem.lessThan(u8, a.name, b.name);
+        }
+    }.lessThan);
+
+}
+
+/// Resolves the package dependencies from raw_deps into the dependencies' ids and inserts them to pckg.deps
+///
+/// **Arguments**
+/// - `pckg_list`: Pointer to list of installed packages.
+/// - `raw_deps`: Array of an array of []const u8 slices that are the names of a packages dependencies.
+/// - `name_index`: Pointer to a StringHashMap(u32) that maps the name of all packages to their id, MAPS TO THEIR SORTED IDS.
+/// - `provides_index`: Same as name_index but for the provides field in the struct.
+/// - `temp_aloc`: Temporary allocator for the temp arrays and arraylists here in the parser.
+/// - `arena`: Arena allocator that lives for as long as the process.
+///
+/// **Returns**
+/// Nothing or an error.
+fn resolve_pckg_deps(pckg_list: *std.ArrayList(pckg), raw_deps: [][][]const u8 , names_index: *std.StringHashMap(u32),
+                        provides_index: *std.StringHashMap(u32), temp_aloc: std.mem.Allocator, arena: std.mem.Allocator) !void {
+
+    var deps_buf = try std.ArrayList(u32).initCapacity(temp_aloc, pckg_list.items.len);
+
+    for(pckg_list.items) |*pak| {
+        deps_buf.clearRetainingCapacity();
+
+        for(raw_deps[pak.parse_idx]) |dep_name| {
+
+            const dep_id = names_index.get(dep_name)
+                orelse provides_index.get(dep_name)
+                orelse continue;
+
+            try deps_buf.append(temp_aloc, dep_id);
+        }
+
+        pak.deps = try arena.dupe(u32, deps_buf.items);
+    }
+
+    var req_by_buf = try temp_aloc.alloc(std.ArrayList(u32), pckg_list.items.len);
+    for(req_by_buf) |*buf| buf.* = try std.ArrayList(u32).initCapacity(temp_aloc, pckg_list.items.len);
+
+    for(pckg_list.items) |*pak| {
+        for(pak.deps) |dep_id| {
+            try req_by_buf[dep_id].append(temp_aloc, pak.id);
+        }
+    }
+
+    for(pckg_list.items) |*pak| {
+        pak.required_by = try arena.dupe(u32, req_by_buf[pak.id].items);
+    }
+
+}
+
 /// Iterates through the /var/lib/pacman/local directory and populates an array list with all the installed packages.
 ///
 /// **Arguments**
@@ -149,6 +213,8 @@ pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !std.ArrayList(pckg) 
     const pckg_count = try count_pckg_dirs(io);
     var pckg_list = try std.ArrayList(pckg).initCapacity(aloc, pckg_count);
 
+    var names_index    = std.StringHashMap(u32).init(aloc);
+    var provides_index = std.StringHashMap(u32).init(aloc);
 
     var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const temp_aloc = temp_arena.allocator();
@@ -177,6 +243,7 @@ pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !std.ArrayList(pckg) 
         try parse_pckg(io, aloc, &pckg_file, &pak, raw_deps, pckg_idx, 
                     &dep_buf, &opt_dep_buf,&provides_buf, temp_aloc);
 
+        pak.parse_idx = pckg_idx;
         try pckg_list.append(aloc, pak);
 
         dep_buf.clearRetainingCapacity();
@@ -188,6 +255,22 @@ pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !std.ArrayList(pckg) 
 
         pckg_idx += 1;
     }
+
+    try sort_pckgs_list(&pckg_list);
+    for(pckg_list.items, 0..) |*pak, i| {
+        pak.id = @intCast(i);
+    }
+
+    for(pckg_list.items) |pak| {
+        try names_index.put(pak.name, pak.id);
+
+        for(pak.provides) |virt| {
+            try provides_index.put(virt, pak.id);
+        }
+    }
+
+    try resolve_pckg_deps(&pckg_list, raw_deps, &names_index, 
+    &provides_index, temp_aloc, aloc);
 
     return pckg_list;
 }

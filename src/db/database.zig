@@ -6,6 +6,7 @@ pub const Reason: type = enum(u8) {
 
 pub const Package: type = struct {
     id:          u32,
+    parse_idx:   u32,
     name:        []const u8,
     desc:        []const u8,
     version:     []const u8,
