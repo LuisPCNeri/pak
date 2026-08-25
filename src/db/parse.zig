@@ -207,14 +207,11 @@ fn resolve_pckg_deps(pckg_list: *std.ArrayList(pckg), raw_deps: [][][]const u8 ,
 ///
 /// **Returns**
 /// An arraylist with all the installed packages or an error.
-pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !std.ArrayList(pckg) {
-
+pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !db.Database {
 
     const pckg_count = try count_pckg_dirs(io);
-    var pckg_list = try std.ArrayList(pckg).initCapacity(aloc, pckg_count);
 
-    var names_index    = std.StringHashMap(u32).init(aloc);
-    var provides_index = std.StringHashMap(u32).init(aloc);
+    var database = try db.Database.init_database(aloc, pckg_count);
 
     var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const temp_aloc = temp_arena.allocator();
@@ -244,7 +241,9 @@ pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !std.ArrayList(pckg) 
                     &dep_buf, &opt_dep_buf,&provides_buf, temp_aloc);
 
         pak.parse_idx = pckg_idx;
-        try pckg_list.append(aloc, pak);
+        try database.pckgs.append(aloc, pak);
+
+        database.total_size += pak.size;
 
         dep_buf.clearRetainingCapacity();
         opt_dep_buf.clearRetainingCapacity();
@@ -256,21 +255,21 @@ pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !std.ArrayList(pckg) 
         pckg_idx += 1;
     }
 
-    try sort_pckgs_list(&pckg_list);
-    for(pckg_list.items, 0..) |*pak, i| {
+    try sort_pckgs_list(&database.pckgs);
+    for(database.pckgs.items, 0..) |*pak, i| {
         pak.id = @intCast(i);
     }
 
-    for(pckg_list.items) |pak| {
-        try names_index.put(pak.name, pak.id);
+    for(database.pckgs.items) |pak| {
+        try database.names_index.put(pak.name, pak.id);
 
         for(pak.provides) |virt| {
-            try provides_index.put(virt, pak.id);
+            try database.provides_index.put(virt, pak.id);
         }
     }
 
-    try resolve_pckg_deps(&pckg_list, raw_deps, &names_index, 
-    &provides_index, temp_aloc, aloc);
+    try resolve_pckg_deps(&database.pckgs, raw_deps, &database.names_index, 
+    &database.provides_index, temp_aloc, aloc);
 
-    return pckg_list;
+    return database;
 }
