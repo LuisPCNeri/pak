@@ -35,6 +35,9 @@ pub fn main(init: std.process.Init) !void {
     var vx = try vaxis.Vaxis.init(io, aloc, map, .{});
     defer vx.deinit(aloc, tty.writer());
 
+    const win = vx.window();
+    var vis_rows: u32 = win.height -| 4;
+
     try tui.init_tui(&vx, &tty);
 
     var loop: vaxis.Loop(vaxis.Event) = .init(io, &tty, &vx);
@@ -43,21 +46,39 @@ pub fn main(init: std.process.Init) !void {
     defer loop.stop();
 
 
+    // For things such as scroll and max scroll
+    var scroll: u32     = 0;
+    var max_scroll: u32 = 0;
+    var cursor: u32     = 0;
+
+    const count: u32    = @intCast(database.pckgs.items.len);
+
+    max_scroll = @intCast(database.pckgs.items.len);
+
     var is_running: bool = true;
     while (is_running) {
 
-        try tui.render_tui(&vx, &tty, &database);
+        try tui.render_tui(&vx, &tty, &database, scroll, cursor);
 
 
         const event = try loop.nextEvent();
         switch (event) {
             .winsize => |ws| {
                 try vx.resize(aloc, tty.writer(), ws);
+                if(vis_rows == 0) vis_rows = vx.window().height -| 4;
             },
             .key_press => |key| {
                 if(key.matches('q', .{})) {
                     is_running = false;
                     break;
+                }
+                if(key.matches(vaxis.Key.down, .{})) {
+                    if(cursor < count - 1) cursor += 1;
+                    if(cursor >= scroll + vis_rows) scroll = cursor - vis_rows + 1;
+                }
+                if(key.matches(vaxis.Key.up, .{})) {
+                    cursor = cursor -| 1;
+                    if(cursor < scroll) scroll = cursor;
                 }
             },
             else => {},

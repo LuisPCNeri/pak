@@ -16,7 +16,7 @@ pub fn deinit_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty) !void {
     try vx.exitAltScreen(tty.writer());
 }
 
-pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: *db.Database) !void {
+pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: *db.Database, scroll: u32, cursor: u32) !void {
 
     var win = vx.window();
     win.clear();
@@ -70,17 +70,43 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: *db.Database) !void {
 
     const frame_aloc = arena.allocator();
 
-    for(data.pckgs.items, 0..) |pckg, i| {
+    const vis: i17 = (footer_win.y_off - 1) - (header_win.y_off + header_win.height);
+    const count: u32 = @intCast(data.pckgs.items.len);
+
+    if(vis < 0) return;
+    const vis_usize: usize = @intCast(vis);
+
+    for(0..vis_usize) |i| {
+
+        if(scroll + i >= count) break;
+        const pckg = data.pckgs.items[scroll + i];
+
+        const is_selected: bool = (scroll + i) == cursor;
 
         var pckg_suffix: []const u8 = "[E]";
         if(pckg.reason == .dependency and pckg.required_by.len > 0)  pckg_suffix = "[S]";
         if(pckg.reason == .dependency and pckg.required_by.len == 0) pckg_suffix = "[!]";
 
-        const pckg_str = try std.fmt.allocPrint(frame_aloc, "{s} {s}", .{pckg.name, pckg_suffix});
 
-        const seg = vaxis.Segment{
-            .text = pckg_str,
+        var row_text = try frame_aloc.alloc(u8, 40);
+        @memset(row_text, ' ');
+
+        const name_len = @min(pckg.name.len, 40);
+        @memcpy(row_text[0..name_len], pckg.name[0..name_len]);
+
+        if(pckg.name.len + pckg_suffix.len <= 40 - 1) {
+            const right_start = 40 - pckg_suffix.len;
+            @memcpy(row_text[right_start..], pckg_suffix);
+        }
+
+        var seg = vaxis.Segment{
+            .text = row_text,
         };
+
+        if(is_selected) {
+            seg.style = .{.bold = true, .bg = .{ .index = 6}, .fg = .{ .index = 0}};
+        }
+
 
         const n: i17 = @intCast(i);
         const pckg_win = win.child(.{
