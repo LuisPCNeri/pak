@@ -17,16 +17,16 @@ pub fn main(init: std.process.Init) !void {
     const map = init.environ_map;
 
     var database = try parse.get_pckgs_list(io, aloc);
-    for(database.pckgs.items, 0..) |pckg, i| {
-        std.debug.print("[{d}] Package: {s} | Deps: ", .{i, pckg.name});
 
-        for(pckg.deps) |dep_id| {
-            std.debug.print("{s} ", .{database.pckgs.items[dep_id].name});
-        }
-
-        std.debug.print("\n", .{});
-    }
-
+    //for(database.pckgs.items, 0..) |pckg, i| {
+    //    std.debug.print("[{d}] Package: {s} | Deps: ", .{i, pckg.name});
+    //
+    //    for(pckg.deps) |dep_id| {
+    //        std.debug.print("{s} ", .{database.pckgs.items[dep_id].name});
+    //    }
+    //
+    //    std.debug.print("\n", .{});
+    //}
 
     var buff: [1024]u8 = undefined;
     var tty = try vaxis.tty.Tty.init(io, &buff);
@@ -68,7 +68,7 @@ pub fn main(init: std.process.Init) !void {
                 if(vis_rows == 0) vis_rows = vx.window().height -| 4;
             },
             .key_press => |key| {
-                if(key.matches('q', .{})) {
+                if(key.matches('q', .{}) or key.matches('Q', .{})) {
                     is_running = false;
                     break;
                 }
