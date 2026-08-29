@@ -17,17 +17,7 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const map = init.environ_map;
 
-    const database = try parse.get_pckgs_list(io, aloc);
-
-    //for(database.pckgs.items, 0..) |pckg, i| {
-    //    std.debug.print("[{d}] Package: {s} | Deps: ", .{i, pckg.name});
-    //
-    //    for(pckg.deps) |dep_id| {
-    //        std.debug.print("{s} ", .{database.pckgs.items[dep_id].name});
-    //    }
-    //
-    //    std.debug.print("\n", .{});
-    //}
+    var database = try parse.get_pckgs_list(io, aloc);
 
     var buff: [1024]u8 = undefined;
     var tty = try vaxis.tty.Tty.init(io, &buff);
@@ -55,6 +45,7 @@ pub fn main(init: std.process.Init) !void {
 
     var search_buff = try std.ArrayList(u8).initCapacity(aloc, 255);
     var need_refilter: bool      = false;
+    var is_size_sorted: bool     = false;
 
     var pckgs_list = try fuzz.fuzzy_find(aloc, search_buff.items, database.pckgs.items);
 
@@ -67,7 +58,7 @@ pub fn main(init: std.process.Init) !void {
         need_refilter = false;
 
         try tui.render_tui(&vx, &tty, pckgs_list, database.total_size, database.pckgs.capacity, 
-        scroll, cursor, search_buff.items, mode);
+        scroll, cursor, search_buff.items, mode, &database);
 
 
         const event = try loop.nextEvent();
@@ -108,7 +99,7 @@ pub fn main(init: std.process.Init) !void {
                         break;
                     }
 
-                    if(key.matches('s', .{}) or key.matches('S', .{})) {
+                    if(key.matches('f', .{}) or key.matches('F', .{})) {
                         mode = .SEARCH;
                     }
 
@@ -120,6 +111,13 @@ pub fn main(init: std.process.Init) !void {
                         cursor = cursor -| 1;
                         if(cursor < scroll) scroll = cursor;
                     }
+                    if(key.matches('s', .{}) or key.matches('S', .{})) {
+                        is_size_sorted = true;
+                        fuzz.sort_by_pckg_size(pckgs_list);
+                    }
+                    if(key.matches('n', .{}) or key.matches('N', .{})) {
+                        fuzz.sort_by_pckg_name(pckgs_list);
+                    }
                 }
             },
             else => {},
@@ -127,6 +125,8 @@ pub fn main(init: std.process.Init) !void {
 
         if(need_refilter) {
             pckgs_list = try fuzz.fuzzy_find(aloc, search_buff.items, database.pckgs.items);
+            if (is_size_sorted) fuzz.sort_by_pckg_size(pckgs_list);
+
             count = @intCast(pckgs_list.len);
 
             // Just so the cursor does not go outside the list.

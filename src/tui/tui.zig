@@ -96,8 +96,54 @@ fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pckgs: 
     }
 }
 
+fn reverse_resolve_ids(temp_aloc: std.mem.Allocator ,ids: []u32, data: *db.Database, prefix: []const u8) ![]const u8 {
+
+    var buf = try std.ArrayList(u8).initCapacity(temp_aloc, 1);
+
+    try buf.appendSlice(temp_aloc, prefix);
+    for(ids, 0..) |id, i| {
+
+        if(data.pckgs.items[id].id >= 0) {
+            try buf.appendSlice(temp_aloc, data.pckgs.items[id].name);
+            if(i < ids.len - 1) try buf.append(temp_aloc, ' ');
+        }
+    }
+
+    const result: []const u8 = buf.items;
+    return result;
+}
+
+fn draw_pckg_info_pane(vx: *vaxis.Vaxis, temp_aloc: std.mem.Allocator, pckg: db.Package, database: *db.Database, x: u32) !void {
+
+    var win = vx.window();
+
+    const base_pckg_info: []const u8 = try std.fmt.allocPrint(temp_aloc, "Name: {s}\nVersion: {s}\nDescription: {s}\nSize: {d} {s}",
+                                                                .{pckg.name, pckg.version, pckg.desc, if (pckg.size > 1024) pckg.size / 1024 else pckg.size,
+                                                                        if (pckg.size > 1024) "KiB" else "Bytes"});
+
+    const pckg_deps       = try reverse_resolve_ids(temp_aloc, pckg.deps, database, "Dependencies: ");
+    const pckg_opt_deps   = try reverse_resolve_ids(temp_aloc, pckg.opt_deps_ids, database, "Opt Depends: ");
+    const pckg_req_by     = try reverse_resolve_ids(temp_aloc, pckg.required_by, database, "Required By: ");
+    const pckg_opt_req_by = try reverse_resolve_ids(temp_aloc, pckg.opt_req_by, database, "Opt Req By: ");
+
+    const pckg_info = try std.fmt.allocPrint(temp_aloc, "{s}\n\n{s}\n\n{s}\n\n{s}\n\n{s}",
+                                            .{base_pckg_info, pckg_deps, pckg_opt_deps, pckg_req_by, pckg_opt_req_by});
+
+    const x_i17: i17 = @intCast(x);
+    const pckg_info_win = win.child(.{
+        .x_off = x_i17 + 2, .y_off = 3,
+        .width = 79, .height = win.height -| 4,
+    });
+
+    const pckg_info_seg = vaxis.Segment{
+        .text = pckg_info,
+    };
+
+    _ = pckg_info_win.print(&.{pckg_info_seg}, .{.wrap = .word});
+}
+
 pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, total_size: u64, total_pckgs_amount: u64, scroll: u32, cursor: u32,
-                  search_term: []const u8, mode: EditorMode) !void {
+                  search_term: []const u8, mode: EditorMode, database: *db.Database) !void {
 
     var win = vx.window();
     win.clear();
@@ -147,15 +193,26 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
     };
 
     var search_seg = vaxis.Segment{
-        .text = "[s]earch",
+        .text = "[f]ind ",
+        .style = .{.dim = true},
+    };
+
+    const name_sort_seg = vaxis.Segment{
+        .text = "[n]ame sort ",
+        .style = .{.dim = true},
+    };
+
+    const size_sort_seg = vaxis.Segment{
+        .text = "[s]ize sort ",
         .style = .{.dim = true},
     };
 
     if(search_term.len > 0 or mode == .SEARCH) {
         var search_slice_buf: [255]u8 = undefined;
-        const search_slice = try std.fmt.bufPrint(&search_slice_buf, "search: {s} |", .{search_term});
+        const search_slice = try std.fmt.bufPrint(&search_slice_buf, "[f]ind: {s} | ", .{search_term});
 
         search_seg.text = search_slice;
+        search_seg.style = .{.bold = true};
     }
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -164,8 +221,11 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
     try draw_packages_pane(vx, &arena, data, scroll, cursor);
     draw_vertical_bar(vx, 45, 3, vx.window().height -| 1);
 
+    if(cursor >= 0 and cursor < data.len) try draw_pckg_info_pane(vx, arena.allocator(), database.pckgs.items[data[cursor].id], database, (45 + 1));
+    draw_vertical_bar(vx, 128, 3, vx.window().height -| 1);
+
     _ = header_win.print(&.{title, pckg_amount_seg, total_size_seg}, .{});
-    _ = footer_win.print(&.{instruction, search_seg}, .{});
+    _ = footer_win.print(&.{instruction, search_seg, name_sort_seg, size_sort_seg}, .{});
 
     try vx.render(tty.writer());
 }
