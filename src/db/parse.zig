@@ -46,6 +46,18 @@ fn strip_version_constraint(dep: []const u8) []const u8 {
     return dep;
 }
 
+/// Takes an optional dependency string and removes both its description and the version constraint.
+///
+/// **Arguments**
+/// - `dep`: The string containing the optional dep.
+///
+/// **Returns**
+/// The opt dep without the description and version constraint.
+fn strip_opt_dep_des(dep: []const u8) []const u8 {
+    const name = if (std.mem.indexOfScalar(u8, dep, ':')) |i| dep[0..i] else dep;
+    return strip_version_constraint(name);
+}
+
 /// Takes in a file and parses its contents into a pcgk struct.
 /// Package dependencies will be stored as a raw []const u8 and not its id that will only be done in the 5 pass.
 ///
@@ -158,16 +170,20 @@ fn sort_pckgs_list(list: *std.ArrayList(pckg)) !void {
 /// - `pckg_list`: Pointer to list of installed packages.
 /// - `raw_deps`: Array of an array of []const u8 slices that are the names of a packages dependencies.
 /// - `name_index`: Pointer to a StringHashMap(u32) that maps the name of all packages to their id, MAPS TO THEIR SORTED IDS.
-/// - `provides_index`: Same as name_index but for the provides field in the struct.
+/// - `provides_index`: Pointer to a StringHashMap([]u32) that maps the name of the package to the ids of all packages it provides, MAPS TO SORTED IDS.
 /// - `temp_aloc`: Temporary allocator for the temp arrays and arraylists here in the parser.
 /// - `arena`: Arena allocator that lives for as long as the process.
 ///
 /// **Returns**
 /// Nothing or an error.
 fn resolve_pckg_deps(pckg_list: *std.ArrayList(pckg), raw_deps: [][][]const u8 , names_index: *std.StringHashMap(u32),
-                        provides_index: *std.StringHashMap(u32), temp_aloc: std.mem.Allocator, arena: std.mem.Allocator) !void {
+                        provides_index: *std.StringHashMap([]u32), temp_aloc: std.mem.Allocator, arena: std.mem.Allocator) !void {
 
     var deps_buf = try std.ArrayList(u32).initCapacity(temp_aloc, pckg_list.items.len);
+
+    var req_by_buf = try temp_aloc.alloc(std.ArrayList(u32), pckg_list.items.len);
+    for(req_by_buf) |*buf| buf.* = try std.ArrayList(u32).initCapacity(temp_aloc, 1);
+
 
     for(pckg_list.items) |*pak| {
         deps_buf.clearRetainingCapacity();
@@ -175,8 +191,13 @@ fn resolve_pckg_deps(pckg_list: *std.ArrayList(pckg), raw_deps: [][][]const u8 ,
         for(raw_deps[pak.parse_idx]) |dep_name| {
 
             const dep_id = names_index.get(dep_name)
-                orelse provides_index.get(dep_name)
-                orelse continue;
+                orelse blk: {
+                const providers = provides_index.get(dep_name) orelse continue;
+                for(providers[1..]) |provider_id| {
+                    try req_by_buf[provider_id].append(temp_aloc, provider_id);
+                }
+                break :blk providers[0];
+            };
 
             try deps_buf.append(temp_aloc, dep_id);
         }
@@ -184,8 +205,36 @@ fn resolve_pckg_deps(pckg_list: *std.ArrayList(pckg), raw_deps: [][][]const u8 ,
         pak.deps = try arena.dupe(u32, deps_buf.items);
     }
 
-    var req_by_buf = try temp_aloc.alloc(std.ArrayList(u32), pckg_list.items.len);
-    for(req_by_buf) |*buf| buf.* = try std.ArrayList(u32).initCapacity(temp_aloc, pckg_list.items.len);
+    var opt_deps_buf = try std.ArrayList(u32).initCapacity(temp_aloc, pckg_list.items.len);
+
+    var opt_req_by_buf = try temp_aloc.alloc(std.ArrayList(u32), pckg_list.items.len);
+    for(opt_req_by_buf) |*buf| buf.* = try std.ArrayList(u32).initCapacity(temp_aloc, 1);
+
+    for(pckg_list.items) |*pak| {
+        opt_deps_buf.clearRetainingCapacity();
+
+        for(pak.opt_deps) |opt_dep_str| {
+            const dep_name = strip_opt_dep_des(opt_dep_str);
+            const dep_id = names_index.get(dep_name)
+                orelse blk: {
+                const providers = provides_index.get(dep_name) orelse continue;
+                for(providers[1..]) |provider_id| {
+                    try req_by_buf[provider_id].append(temp_aloc, provider_id);
+                }
+                break :blk providers[0];
+            };
+
+            try opt_deps_buf.append(temp_aloc, dep_id);
+            try opt_req_by_buf[dep_id].append(temp_aloc, pak.id);
+        }
+
+        pak.opt_deps_ids = try arena.dupe(u32, opt_deps_buf.items);
+    }
+
+    for(pckg_list.items) |*pak| {
+        pak.opt_req_by = try arena.dupe(u32, opt_req_by_buf[pak.id].items);
+    }
+
 
     for(pckg_list.items) |*pak| {
         for(pak.deps) |dep_id| {
@@ -218,9 +267,9 @@ pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !db.Database {
 
     const raw_deps = try temp_aloc.alloc([][]const u8, pckg_count);
 
-    var dep_buf      = try std.ArrayList([]const u8).initCapacity(temp_aloc, pckg_count);
-    var opt_dep_buf  = try std.ArrayList([]const u8).initCapacity(temp_aloc, pckg_count);
-    var provides_buf = try std.ArrayList([]const u8).initCapacity(temp_aloc, pckg_count);
+    var dep_buf      = try std.ArrayList([]const u8).initCapacity(temp_aloc, 1);
+    var opt_dep_buf  = try std.ArrayList([]const u8).initCapacity(temp_aloc, 1);
+    var provides_buf = try std.ArrayList([]const u8).initCapacity(temp_aloc, 1);
 
 
     var dir = try std.Io.Dir.cwd().openDir(io, "/var/lib/pacman/local", .{ .iterate = true});
@@ -262,10 +311,28 @@ pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !db.Database {
 
     for(database.pckgs.items) |pak| {
         try database.names_index.put(pak.name, pak.id);
+    }
 
-        for(pak.provides) |virt| {
-            try database.provides_index.put(virt, pak.id);
-        }
+    var multi_provides_buf = try std.ArrayList(u32).initCapacity(temp_aloc, 1);
+    for(database.pckgs.items) |pak| {
+
+            try database.names_index.put(pak.name, pak.id);
+
+            for(pak.provides) |virt| {
+                const virt_name = strip_version_constraint(virt);
+                const existing = database.provides_index.get(virt_name);
+
+                if(existing) |ids| {
+                    multi_provides_buf.clearRetainingCapacity();
+
+                    try multi_provides_buf.appendSlice(temp_aloc, ids);
+                    try multi_provides_buf.append(temp_aloc, pak.id);
+                    try database.provides_index.put(virt_name, try aloc.dupe(u32, multi_provides_buf.items));
+
+                } else {
+                    try database.provides_index.put(virt_name, try aloc.dupe(u32, &.{pak.id}));
+                }
+            }
     }
 
     try resolve_pckg_deps(&database.pckgs, raw_deps, &database.names_index, 

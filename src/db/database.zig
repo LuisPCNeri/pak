@@ -13,8 +13,10 @@ pub const Package: type = struct {
     desc:        []const u8,
     version:     []const u8,
     size:        u64,
-    deps:         []u32,
+    deps:        []u32,
+    opt_deps_ids:[]u32,
     required_by: []u32,
+    opt_req_by:  []u32,
     provides:    [][]const u8,
     opt_deps:    [][]const u8,
     files_start: u32,
@@ -27,14 +29,14 @@ pub const Database: type = struct {
     arena:          std.mem.Allocator,
     pckgs:          std.ArrayList(Package),
     names_index:     std.StringHashMap(u32),
-    provides_index: std.StringHashMap(u32),
+    provides_index: std.StringHashMap([]u32),
     orphans:        std.ArrayList(u32),
     total_size:     u64,
 
     pub fn init_database(arena: std.mem.Allocator, pckg_count: u32) !Database {
 
         const name_index = std.StringHashMap(u32).init(arena);
-        const provides_index = std.StringHashMap(u32).init(arena);
+        const provides_index = std.StringHashMap([]u32).init(arena);
 
         const pckgs = try std.ArrayList(Package).initCapacity(arena, pckg_count);
         const orphans = try std.ArrayList(u32).initCapacity(arena, pckg_count);
