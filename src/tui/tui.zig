@@ -1,8 +1,13 @@
 const vaxis = @import("vaxis");
-
 const std = @import("std");
 
-const db = @import("../db/database.zig");
+const db     = @import("../db/database.zig");
+const search = @import("../util/fuzzy.zig");
+
+pub const EditorMode = enum(u8) {
+    NORMAL = 0,
+    SEARCH = 1,
+};
 
 pub fn init_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty) !void {
 
@@ -37,12 +42,12 @@ fn draw_vertical_bar(vx: *vaxis.Vaxis, x: i17, start_y: usize, end_y: usize) voi
     }
 }
 
-fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, data: *db.Database, scroll: u32, cursor: u32) !void {
+fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pckgs: []const db.Package, scroll: u32, cursor: u32) !void {
 
     const frame_aloc = arena.allocator();
 
     const vis: i17   = vx.window().height -| 4;
-    const count: u32 = @intCast(data.pckgs.items.len);
+    const count: u32 = @intCast(pckgs.len);
 
     if(vis < 0) return;
     const vis_usize: usize = @intCast(vis);
@@ -50,13 +55,13 @@ fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, data: *
     for(0..vis_usize) |i| {
 
         if(scroll + i >= count) break;
-        const pckg = data.pckgs.items[scroll + i];
+        const pckg = pckgs[scroll + i];
 
         const is_selected: bool = (scroll + i) == cursor;
 
         var pckg_suffix: []const u8 = "[E]";
         if(pckg.reason == .dependency and pckg.required_by.len > 0)  pckg_suffix = "[S]";
-        if(pckg.reason == .dependency and pckg.required_by.len == 0) pckg_suffix = "[!]";
+        if(pckg.reason == .dependency and pckg.required_by.len == 0 and pckg.opt_req_by.len == 0) pckg_suffix = "[!]";
 
 
         var row_text = try frame_aloc.alloc(u8, 40);
@@ -91,7 +96,8 @@ fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, data: *
     }
 }
 
-pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: *db.Database, scroll: u32, cursor: u32) !void {
+pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, total_size: u64, total_pckgs_amount: u64, scroll: u32, cursor: u32,
+                  search_term: []const u8, mode: EditorMode) !void {
 
     var win = vx.window();
     win.clear();
@@ -113,13 +119,13 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: *db.Database, scroll:
 
     var buf: [128]u8 = undefined;
 
-    const total_pckg_amount_str = try std.fmt.bufPrint(&buf, "{d} packages | ", .{data.pckgs.capacity} );
+    const total_pckg_amount_str = try std.fmt.bufPrint(&buf, "{d} packages | ", .{total_pckgs_amount} );
     const pckg_amount_seg = vaxis.Segment{
         .text = total_pckg_amount_str,
         .style = .{.bold = true},
     };
 
-    var data_size: f64 = @floatFromInt(data.total_size);
+    var data_size: f64 = @floatFromInt(total_size);
     data_size /= 1024.0;
     data_size /= 1024.0;
 
@@ -136,10 +142,21 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: *db.Database, scroll:
     };
 
     const instruction = vaxis.Segment{
-        .text = "[q]uit",
+        .text = "[q]uit ",
         .style = .{.dim = true},
     };
 
+    var search_seg = vaxis.Segment{
+        .text = "[s]earch",
+        .style = .{.dim = true},
+    };
+
+    if(search_term.len > 0 or mode == .SEARCH) {
+        var search_slice_buf: [255]u8 = undefined;
+        const search_slice = try std.fmt.bufPrint(&search_slice_buf, "search: {s} |", .{search_term});
+
+        search_seg.text = search_slice;
+    }
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -148,7 +165,7 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: *db.Database, scroll:
     draw_vertical_bar(vx, 45, 3, vx.window().height -| 1);
 
     _ = header_win.print(&.{title, pckg_amount_seg, total_size_seg}, .{});
-    _ = footer_win.print(&.{instruction}, .{});
+    _ = footer_win.print(&.{instruction, search_seg}, .{});
 
     try vx.render(tty.writer());
 }
