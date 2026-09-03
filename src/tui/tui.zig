@@ -22,27 +22,23 @@ pub fn deinit_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty) !void {
 }
 
 fn draw_vertical_bar(vx: *vaxis.Vaxis, x: i17, start_y: usize, end_y: usize) void {
-    if(end_y <= start_y) return;
+    if(end_y <= start_y or (x < 0) or (end_y < 0) ) return;
 
-    const bar_seg = vaxis.Segment{
-        .text = "|",
+    const cell = vaxis.Cell{
+        .char = .{.grapheme = "│", .width = 1 },
         .style = .{.dim = true},
     };
 
-    for(start_y..end_y) |y| {
+    var win: vaxis.Window = vx.window();
 
-        const y_off: i17 = @intCast(y);
-        const bar_win = vx.window().child(.{
-            .x_off = x, .y_off = y_off,
-            .width = 1, .height = 1,
-        });
-
-        _ = bar_win.print(&.{bar_seg}, .{});
-
+    var y: u16 = @intCast(start_y);
+    while(y < end_y) : (y += 1) {
+        const col: u16 = @intCast(x);
+        win.writeCell(col, y, cell);
     }
 }
 
-fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pckgs: []const db.Package, scroll: u32, cursor: u32) !void {
+fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pckgs: []const db.Package, scroll: u32, cursor: u32, w: u32) !void {
 
     const frame_aloc = arena.allocator();
 
@@ -87,7 +83,7 @@ fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pckgs: 
         const n: i17 = @intCast(i);
         const pckg_win = vx.window().child(.{
             .x_off = 2, .y_off = 3 + n,
-            .width = 40, .height = 1,
+            .width = @intCast(w), .height = 1,
         });
 
         if(pckg_win.y_off == vx.window().height -| 1) break;
@@ -113,7 +109,7 @@ fn reverse_resolve_ids(temp_aloc: std.mem.Allocator ,ids: []u32, data: *db.Datab
     return result;
 }
 
-fn draw_pckg_info_pane(vx: *vaxis.Vaxis, temp_aloc: std.mem.Allocator, pckg: db.Package, database: *db.Database, x: u32) !void {
+fn draw_pckg_info_pane(vx: *vaxis.Vaxis, temp_aloc: std.mem.Allocator, pckg: db.Package, database: *db.Database, x: u32, w: u32) !void {
 
     var win = vx.window();
 
@@ -132,7 +128,7 @@ fn draw_pckg_info_pane(vx: *vaxis.Vaxis, temp_aloc: std.mem.Allocator, pckg: db.
     const x_i17: i17 = @intCast(x);
     const pckg_info_win = win.child(.{
         .x_off = x_i17 + 2, .y_off = 3,
-        .width = 79, .height = win.height -| 4,
+        .width = @intCast(w), .height = win.height -| 4,
     });
 
     const pckg_info_seg = vaxis.Segment{
@@ -218,11 +214,17 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    try draw_packages_pane(vx, &arena, data, scroll, cursor);
-    draw_vertical_bar(vx, 45, 3, vx.window().height -| 1);
+    const bar1_x: u32  = (win.width / 4) + 2;           // 25% mark
+    const bar2_x: u32  = (win.width * 8) / 10;    // 60% mark
+    const pane1_w: u32 = bar1_x -| 2;
+    const pane2_w: u32 = bar2_x -| bar1_x -| 2;
 
-    if(cursor >= 0 and cursor < data.len) try draw_pckg_info_pane(vx, arena.allocator(), database.pckgs.items[data[cursor].id], database, (45 + 1));
-    draw_vertical_bar(vx, 128, 3, vx.window().height -| 1);
+    try draw_packages_pane(vx, &arena, data, scroll, cursor, pane1_w);
+    draw_vertical_bar(vx, @intCast(bar1_x), 3, vx.window().height -| 1);
+
+    if(cursor >= 0 and cursor < data.len) 
+        try draw_pckg_info_pane(vx, arena.allocator(), database.pckgs.items[data[cursor].id], database, bar1_x + 1, pane2_w);
+    draw_vertical_bar(vx, @intCast(bar2_x), 3, vx.window().height -| 1);
 
     _ = header_win.print(&.{title, pckg_amount_seg, total_size_seg}, .{});
     _ = footer_win.print(&.{instruction, search_seg, name_sort_seg, size_sort_seg}, .{});

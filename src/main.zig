@@ -26,13 +26,13 @@ pub fn main(init: std.process.Init) !void {
     var vx = try vaxis.Vaxis.init(io, aloc, map, .{});
     defer vx.deinit(aloc, tty.writer());
 
-    const win = vx.window();
-    var vis_rows: u32 = win.height -| 4;
+    var vis_rows: u32 = 0;
 
     try tui.init_tui(&vx, &tty);
 
     var loop: vaxis.Loop(vaxis.Event) = .init(io, &tty, &vx);
     try loop.start();
+    try loop.installResizeHandler();
 
     defer loop.stop();
 
@@ -64,8 +64,9 @@ pub fn main(init: std.process.Init) !void {
         const event = try loop.nextEvent();
         switch (event) {
             .winsize => |ws| {
+                std.debug.print("resize: {d}x{d}\n", .{ws.cols, ws.rows});
                 try vx.resize(aloc, tty.writer(), ws);
-                if(vis_rows == 0) vis_rows = vx.window().height -| 4;
+                vis_rows = vx.window().height -| 4;
             },
             .key_press => |key| {
 
@@ -111,6 +112,17 @@ pub fn main(init: std.process.Init) !void {
                         cursor = cursor -| 1;
                         if(cursor < scroll) scroll = cursor;
                     }
+                    if(key.matches(vaxis.Key.page_down, .{})) {
+                        if(cursor < count - 10)     cursor += 10;
+                        if(cursor + 10 > count - 1) cursor = count - 1;
+                        if(cursor >= scroll + vis_rows) scroll = cursor - vis_rows + 1;
+                    }
+                    if(key.matches(vaxis.Key.page_up, .{})) {
+                        cursor = cursor -| 10;
+                        if(cursor <= 9)     cursor = 0;
+                        if(cursor < scroll) scroll = cursor;
+                    }
+
                     if(key.matches('s', .{}) or key.matches('S', .{})) {
                         is_size_sorted = true;
                         fuzz.sort_by_pckg_size(pckgs_list);
