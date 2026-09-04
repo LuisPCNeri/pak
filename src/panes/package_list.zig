@@ -4,6 +4,8 @@ const db = @import("../db/database.zig");
 
 pub fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pckgs: []const db.Package, scroll: u32, cursor: u32, w: u32, is_active: bool) !void {
 
+    if(pckgs.len <= 0) return;
+
     const frame_aloc = arena.allocator();
 
     const vis: i17   = vx.window().height -| 4;

@@ -197,23 +197,31 @@ pub fn main(init: std.process.Init) !void {
 
         if(need_refilter) {
             pckgs_list = try fuzz.fuzzy_find(aloc, search_buff.items, database.pckgs.items);
-            if (is_size_sorted) fuzz.sort_by_pckg_size(pckgs_list);
 
-            count = @intCast(pckgs_list.len);
+            if(pckgs_list.len > 0) {
 
-            // Just so the cursor does not go outside the list.
-            cursor = 0;
-            tree.clearRetainingCapacity();
-            const package = database.pckgs.items[pckgs_list[cursor].id];
-            tree = try graph.create_tree_from_root(aloc, package, &database);
-            prev_cursor = cursor;
+                if (is_size_sorted) fuzz.sort_by_pckg_size(pckgs_list);
+
+                count = @intCast(pckgs_list.len);
+
+                // Just so the cursor does not go outside the list.
+                cursor = 0;
+                tree.clearRetainingCapacity();
+                const package = database.pckgs.items[pckgs_list[cursor].id];
+                tree = try graph.create_tree_from_root(aloc, package, &database);
+                prev_cursor = cursor;
+            }
         }
 
 
         if(cursor != prev_cursor) {
             tree.clearRetainingCapacity();
-            const package = database.pckgs.items[pckgs_list[cursor].id];
-            tree = try graph.create_tree_from_root(aloc, package, &database);
+
+            if(pckgs_list.len > 0) {
+                const package = database.pckgs.items[pckgs_list[cursor].id];
+                tree = try graph.create_tree_from_root(aloc, package, &database);
+            }
+ 
             prev_cursor = cursor;
         }
     }

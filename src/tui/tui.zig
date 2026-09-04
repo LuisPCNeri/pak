@@ -142,14 +142,15 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
     const pane1_w: u32 = bar1_x -| 2;
     const pane2_w: u32 = bar2_x -| bar1_x -| 2;
 
-    try pckg_list_pane.draw_packages_pane(vx, &arena, data, scroll, cursor, pane1_w, cur_pane == .LIST_PANE);
-    draw_vertical_bar(vx, @intCast(bar1_x), 3, vx.window().height -| 1);
 
-    if(cursor >= 0 and cursor < data.len) {
+    draw_vertical_bar(vx, @intCast(bar1_x), 3, vx.window().height -| 1);
+    draw_vertical_bar(vx, @intCast(bar2_x), 3, vx.window().height -| 1);
+
+    if(cursor >= 0 and cursor < data.len and data.len > 0) {
+        try pckg_list_pane.draw_packages_pane(vx, &arena, data, scroll, cursor, pane1_w, cur_pane == .LIST_PANE);
+
         const package: db.Package = database.pckgs.items[data[cursor].id];
         try info_pane.draw_pckg_info_pane(vx, arena.allocator(), package, database, bar1_x + 1, pane2_w);
-
-        draw_vertical_bar(vx, @intCast(bar2_x), 3, vx.window().height -| 1);
 
         try graph_pane.render_graph_pane(vx, arena.allocator(), tree.items, database, bar2_x + 2, 3,
                                         graph_cursor, graph_scroll, cur_pane == .GRAPH_PANE);
