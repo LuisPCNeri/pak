@@ -103,17 +103,32 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode) !v
 
     var search_seg = vaxis.Segment{
         .text = "[f]ind ",
-        .style = .{.dim = true},
+        .style     = .{.dim = true},
     };
 
     const name_sort_seg = vaxis.Segment{
         .text = "[n]ame sort ",
-        .style = .{.dim = true},
+        .style     = .{.dim = true},
     };
 
     const size_sort_seg = vaxis.Segment{
         .text = "[s]ize sort ",
-        .style = .{.dim = true},
+        .style     = .{.dim = true},
+    };
+
+    const vert_move_seg = vaxis.Segment{
+        .text = "[↑/↓] Scroll ",
+        .style     = .{ .dim = true},
+    };
+
+    const horizontal_mov_Seg = vaxis.Segment{
+        .text = "[←/→] Switch Pane ",
+        .style     = .{ .dim = true },
+    };
+
+    const node_op_seg = vaxis.Segment{
+        .text = "[SPACE] Open/close Graph Node ",
+        .style     = .{ .dim = true },
     };
 
     if(search_term.len > 0 or mode == .SEARCH) {
@@ -124,7 +139,7 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode) !v
         search_seg.style = .{.bold = true};
     }
 
-    _ = footer_win.print(&.{instruction, search_seg, name_sort_seg, size_sort_seg}, .{});
+    _ = footer_win.print(&.{instruction, vert_move_seg, horizontal_mov_Seg, search_seg, name_sort_seg, size_sort_seg, node_op_seg}, .{});
 }
 
 pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, total_size: u64, total_pckgs_amount: u64, scroll: u32, cursor: u32,
