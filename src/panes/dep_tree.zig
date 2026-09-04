@@ -2,7 +2,7 @@ const std   = @import("std");
 const db    = @import("../db/database.zig");
 const vaxis: type = @import("vaxis");
 
-const TreeNode = struct {
+pub const TreeNode = struct {
 
     pckg_id:     u32,
     depth:       u32,
@@ -105,7 +105,7 @@ pub fn expand_node(frame_aloc: std.mem.Allocator, idx: u32, tree: *std.ArrayList
             .pckg_id      = dep_id,
             .depth        = node.depth + 1,
             .is_expanded = false,
-            .is_shared   = database.pckgs.items[dep_id].required_by > 1,
+            .is_shared   = database.pckgs.items[dep_id].required_by.len > 1,
             .is_cycle    = is_ancestor(tree.items, idx, dep_id),
             .is_optional = false,
         });
@@ -116,7 +116,7 @@ pub fn expand_node(frame_aloc: std.mem.Allocator, idx: u32, tree: *std.ArrayList
             .pckg_id      = dep_id,
             .depth        = node.depth + 1,
             .is_expanded = false,
-            .is_shared   = database.pckgs.items[dep_id].required_by > 1,
+            .is_shared   = database.pckgs.items[dep_id].required_by.len > 1,
             .is_cycle    = is_ancestor(tree.items, idx, dep_id),
             .is_optional = true,
         });
@@ -133,12 +133,21 @@ pub fn collapse_node(idx: u32, tree: *std.ArrayList(TreeNode)) !void {
     }
 }
 
-pub fn render_graph_pane(vx: *vaxis.Vaxis, frame_aloc: std.mem.Allocator, nodes: []TreeNode, database: *db.Database, pane_x: u32, pane_y: u32) !void {
+pub fn render_graph_pane(vx: *vaxis.Vaxis, frame_aloc: std.mem.Allocator, nodes: []TreeNode, database: *db.Database, pane_x: u32, pane_y: u32,
+                         cursor: u32, scroll: u32, is_active: bool) !void {
 
     var win = vx.window();
+    const vis = win.height -| 4;
+    const vis_u: usize = @intCast(vis);
 
-    for(nodes, 0..) |node, i| {
-        const pckg = database.pckgs.items[node.pckg_id];
+    for(0..vis_u) |i| {
+
+        if(scroll + i >= nodes.len) break;
+
+        const node = nodes[scroll + i];
+
+        const pckg     = database.pckgs.items[node.pckg_id];
+        const is_selected = (scroll + i) == cursor;
 
         var col: usize = 0;
         var d: u8      = 0;
@@ -146,13 +155,13 @@ pub fn render_graph_pane(vx: *vaxis.Vaxis, frame_aloc: std.mem.Allocator, nodes:
         while(d < node.depth) : (d += 1) {
             if(d == node.depth - 1) {
 
-                const connector = if(is_last_sibling(nodes, i)) "└─" else "├─";
+                const connector = if(is_last_sibling(nodes, scroll + i)) "└─" else "├─";
                 _ = win.print(&.{.{.text = connector}},
                 .{.col_offset = @intCast(pane_x + col), .row_offset = @intCast(pane_y + i)});
 
             } else {
 
-                const pipe = if(ancestor_is_last(nodes, i, d + 1)) "  " else "│ ";
+                const pipe = if(ancestor_is_last(nodes, scroll + i, d + 1)) "  " else "│ ";
                 _ = win.print(&.{.{.text = pipe}},
                 .{.col_offset = @intCast(pane_x + col), .row_offset = @intCast(pane_y + i)});
 
@@ -167,10 +176,14 @@ pub fn render_graph_pane(vx: *vaxis.Vaxis, frame_aloc: std.mem.Allocator, nodes:
 
         const line = try std.fmt.allocPrint(frame_aloc, "{s}{s}{s}{s}", .{prefix, pckg.name, shared, cycle});
 
-        const seg = vaxis.Segment{
+        var seg = vaxis.Segment{
             .text = line,
             .style = .{ .dim = node.is_optional },
         };
+
+        if(is_selected and is_active) {
+            seg.style = .{ .dim = false, .bg = .{.index = 6}, .fg = .{.index = 0} };
+        }
 
         _ = win.print(&.{seg}, .{.col_offset = @intCast(pane_x + col), .row_offset = @intCast(pane_y + i)});
     }

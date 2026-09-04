@@ -8,6 +8,19 @@ const db    = @import("db/database.zig");
 const parse = @import("db/parse.zig");
 const tui   = @import("tui/tui.zig");
 const fuzz  = @import("util/fuzzy.zig");
+const graph = @import("panes/dep_tree.zig");
+
+fn move_cursor(cursor: *u32, scroll: *u32, delta: i32, count: u32, vis_rows: u32) void {
+    if(delta > 0) {
+        cursor.* +|= @intCast(delta);
+        if(cursor.* >= count) cursor.* = count - 1;
+        if(cursor.* >= scroll.* + vis_rows) scroll.* = cursor.* -| vis_rows + 1;
+    }
+    else {
+        cursor.* -|= @intCast(-delta);
+        if(cursor.* < scroll.*) scroll.* = cursor.*;
+    }
+}
 
 pub fn main(init: std.process.Init) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -28,6 +41,8 @@ pub fn main(init: std.process.Init) !void {
 
     var vis_rows: u32 = 0;
 
+    var tree = try std.ArrayList(graph.TreeNode).initCapacity(aloc, 1);
+
     try tui.init_tui(&vx, &tty);
 
     var loop: vaxis.Loop(vaxis.Event) = .init(io, &tty, &vx);
@@ -38,10 +53,15 @@ pub fn main(init: std.process.Init) !void {
 
 
     // For things such as scroll and max scroll
-    var scroll: u32      = 0;
-    var max_scroll: u32  = 0;
-    var cursor: u32      = 0;
-    var mode = tui.EditorMode.NORMAL;
+    var scroll: u32         = 0;
+    var max_scroll: u32     = 0;
+    var cursor: u32         = 0;
+    var mode    = tui.EditorMode.NORMAL;
+    var prev_cursor: u32 = std.math.maxInt(u32);
+
+    var graph_scroll: u32   = 0;
+    var graph_cursor: u32   = 0;
+    var cur_pane: tui.Panes = tui.Panes.LIST_PANE;
 
     var search_buff = try std.ArrayList(u8).initCapacity(aloc, 255);
     var need_refilter: bool      = false;
@@ -58,7 +78,8 @@ pub fn main(init: std.process.Init) !void {
         need_refilter = false;
 
         try tui.render_tui(&vx, &tty, pckgs_list, database.total_size, database.pckgs.capacity, 
-        scroll, cursor, search_buff.items, mode, &database);
+        scroll, cursor, search_buff.items, mode, &database, &tree, cur_pane,
+        graph_cursor, graph_scroll);
 
 
         const event = try loop.nextEvent();
@@ -105,22 +126,52 @@ pub fn main(init: std.process.Init) !void {
                     }
 
                     if(key.matches(vaxis.Key.down, .{})) {
-                        if(cursor < count - 1) cursor += 1;
-                        if(cursor >= scroll + vis_rows) scroll = cursor - vis_rows + 1;
+                        switch (cur_pane) {
+                            .LIST_PANE => move_cursor(&cursor, &scroll, 1, count, vis_rows),
+                            .GRAPH_PANE => move_cursor(&graph_cursor, &graph_scroll, 1, @intCast(tree.items.len), vis_rows),
+                        }
                     }
                     if(key.matches(vaxis.Key.up, .{})) {
-                        cursor = cursor -| 1;
-                        if(cursor < scroll) scroll = cursor;
+                        switch (cur_pane) {
+                            .LIST_PANE => move_cursor(&cursor, &scroll, -1, count, vis_rows),
+                            .GRAPH_PANE => move_cursor(&graph_cursor, &graph_scroll, -1, @intCast(tree.items.len), vis_rows),
+                        }
                     }
                     if(key.matches(vaxis.Key.page_down, .{})) {
-                        if(cursor < count - 10)     cursor += 10;
-                        if(cursor + 10 > count - 1) cursor = count - 1;
-                        if(cursor >= scroll + vis_rows) scroll = cursor - vis_rows + 1;
+                        switch (cur_pane) {
+                            .LIST_PANE => move_cursor(&cursor, &scroll, 10, count, vis_rows),
+                            .GRAPH_PANE => move_cursor(&graph_cursor, &graph_scroll, 10, @intCast(tree.items.len), vis_rows),
+                        }
                     }
                     if(key.matches(vaxis.Key.page_up, .{})) {
-                        cursor = cursor -| 10;
-                        if(cursor <= 9)     cursor = 0;
-                        if(cursor < scroll) scroll = cursor;
+                        switch (cur_pane) {
+                            .LIST_PANE => move_cursor(&cursor, &scroll, -10, count, vis_rows),
+                            .GRAPH_PANE => move_cursor(&graph_cursor, &graph_scroll, -10, @intCast(tree.items.len), vis_rows),
+                        }
+                    }
+
+                    if(key.matches('k', .{}) or key.matches('K', .{})
+                        or key.matches(vaxis.Key.right, .{})) {
+
+                        graph_cursor = 0;
+                        graph_scroll = 0;
+
+                        const pane_idx = @intFromEnum(cur_pane);
+                        if(pane_idx + 1 >= @typeInfo(tui.Panes).@"enum".fields.len) {
+                            cur_pane = @enumFromInt(0);
+                        }
+                        else cur_pane = @enumFromInt(@intFromEnum(cur_pane) + 1);
+                    }
+                    if(key.matches('j', .{}) or key.matches('J', .{})
+                        or key.matches(vaxis.Key.left, .{})) {
+
+                        graph_cursor = 0;
+                        graph_scroll = 0;
+
+                        if(@intFromEnum(cur_pane) == 0) {
+                            cur_pane = @enumFromInt(@typeInfo(tui.Panes).@"enum".fields.len - 1);
+                        }
+                        else cur_pane = @enumFromInt(@intFromEnum(cur_pane) -| 1);
                     }
 
                     if(key.matches('s', .{}) or key.matches('S', .{})) {
@@ -129,6 +180,15 @@ pub fn main(init: std.process.Init) !void {
                     }
                     if(key.matches('n', .{}) or key.matches('N', .{})) {
                         fuzz.sort_by_pckg_name(pckgs_list);
+                    }
+
+                    if(key.matches(' ', .{}) and cur_pane == .GRAPH_PANE) {
+                        if(!tree.items[graph_cursor].is_expanded) {
+                            try graph.expand_node(aloc, graph_cursor, &tree, &database);
+                        }
+                        else {
+                            try graph.collapse_node(graph_cursor, &tree);
+                        }
                     }
                 }
             },
@@ -143,6 +203,18 @@ pub fn main(init: std.process.Init) !void {
 
             // Just so the cursor does not go outside the list.
             cursor = 0;
+            tree.clearRetainingCapacity();
+            const package = database.pckgs.items[pckgs_list[cursor].id];
+            tree = try graph.create_tree_from_root(aloc, package, &database);
+            prev_cursor = cursor;
+        }
+
+
+        if(cursor != prev_cursor) {
+            tree.clearRetainingCapacity();
+            const package = database.pckgs.items[pckgs_list[cursor].id];
+            tree = try graph.create_tree_from_root(aloc, package, &database);
+            prev_cursor = cursor;
         }
     }
 

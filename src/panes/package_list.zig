@@ -2,7 +2,7 @@ const vaxis = @import("vaxis");
 const std = @import("std");
 const db = @import("../db/database.zig");
 
-pub fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pckgs: []const db.Package, scroll: u32, cursor: u32, w: u32) !void {
+pub fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pckgs: []const db.Package, scroll: u32, cursor: u32, w: u32, is_active: bool) !void {
 
     const frame_aloc = arena.allocator();
 
@@ -39,8 +39,11 @@ pub fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pck
             .text = row_text,
         };
 
-        if(is_selected) {
+        if(is_selected and is_active) {
             seg.style = .{.bold = true, .bg = .{ .index = 6}, .fg = .{ .index = 0}};
+        }
+        if(is_selected and !is_active) {
+            seg.style = .{.bold = true, .bg = .{ .index = 215}, .fg = .{ .index = 0}};
         }
 
 

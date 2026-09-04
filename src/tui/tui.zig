@@ -13,6 +13,12 @@ pub const EditorMode = enum(u8) {
     SEARCH = 1,
 };
 
+pub const Panes = enum(u8) {
+    LIST_PANE  = 0,
+    // Info pane is skipped as it has no scrollable items.
+    GRAPH_PANE = 1,
+};
+
 pub fn init_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty) !void {
 
     try vx.enterAltScreen(tty.writer());
@@ -122,7 +128,8 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode) !v
 }
 
 pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, total_size: u64, total_pckgs_amount: u64, scroll: u32, cursor: u32,
-                  search_term: []const u8, mode: EditorMode, database: *db.Database) !void {
+                  search_term: []const u8, mode: EditorMode, database: *db.Database, tree: *std.ArrayList(graph_pane.TreeNode), cur_pane: Panes,
+                  graph_cursor: u32, graph_scroll: u32) !void {
 
     var win = vx.window();
     win.clear();
@@ -131,11 +138,11 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
     defer arena.deinit();
 
     const bar1_x: u32  = (win.width / 4) + 2;           // 25% mark
-    const bar2_x: u32  = (win.width * 8) / 10;    // 60% mark
+    const bar2_x: u32  = (win.width * 6) / 10;    // 60% mark
     const pane1_w: u32 = bar1_x -| 2;
     const pane2_w: u32 = bar2_x -| bar1_x -| 2;
 
-    try pckg_list_pane.draw_packages_pane(vx, &arena, data, scroll, cursor, pane1_w);
+    try pckg_list_pane.draw_packages_pane(vx, &arena, data, scroll, cursor, pane1_w, cur_pane == .LIST_PANE);
     draw_vertical_bar(vx, @intCast(bar1_x), 3, vx.window().height -| 1);
 
     if(cursor >= 0 and cursor < data.len) {
@@ -144,8 +151,8 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
 
         draw_vertical_bar(vx, @intCast(bar2_x), 3, vx.window().height -| 1);
 
-        const tree = try graph_pane.create_tree_from_root(arena.allocator(), package, database);
-        try graph_pane.render_graph_pane(vx, arena.allocator(), tree.items, database, bar2_x + 2, 3);
+        try graph_pane.render_graph_pane(vx, arena.allocator(), tree.items, database, bar2_x + 2, 3,
+                                        graph_cursor, graph_scroll, cur_pane == .GRAPH_PANE);
     }
 
     try render_header(vx, total_pckgs_amount, total_size, arena.allocator());
