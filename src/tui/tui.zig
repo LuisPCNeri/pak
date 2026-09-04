@@ -6,6 +6,7 @@ const search = @import("../util/fuzzy.zig");
 
 const pckg_list_pane = @import("../panes/package_list.zig");
 const info_pane = @import("../panes/info.zig");
+const graph_pane = @import("../panes/dep_tree.zig");
 
 pub const EditorMode = enum(u8) {
     NORMAL = 0,
@@ -142,6 +143,9 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
         try info_pane.draw_pckg_info_pane(vx, arena.allocator(), package, database, bar1_x + 1, pane2_w);
 
         draw_vertical_bar(vx, @intCast(bar2_x), 3, vx.window().height -| 1);
+
+        const tree = try graph_pane.create_tree_from_root(arena.allocator(), package, database);
+        try graph_pane.render_graph_pane(vx, arena.allocator(), tree.items, database, bar2_x + 2, 3);
     }
 
     try render_header(vx, total_pckgs_amount, total_size, arena.allocator());
