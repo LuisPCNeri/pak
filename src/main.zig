@@ -10,6 +10,17 @@ const tui   = @import("tui/tui.zig");
 const fuzz  = @import("util/fuzzy.zig");
 const graph = @import("panes/dep_tree.zig");
 
+/// Generalized function to move the cursor on any pane.
+///
+/// **Arguments**
+/// - cursor:  A pointer to an unsigned integer that represents the current position of the cursor.
+/// - scroll:  A pointer to an unsigned integer that represents the visual offset in the array of items shown in the pane, be it pckgs_list or tree.
+/// - delta:   The amount of indexes to move by.
+/// - count:   The amount of items in the current pane.
+/// - vis_row: The amount of visible item rows at any time in the TUI.
+///
+/// **Returns**
+/// Nothing.
 fn move_cursor(cursor: *u32, scroll: *u32, delta: i32, count: u32, vis_rows: u32) void {
     if(delta > 0) {
         cursor.* +|= @intCast(delta);

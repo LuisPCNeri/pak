@@ -31,6 +31,15 @@ fn has_substring(needle: []const u8, haystack: []const u8) bool {
     return std.mem.indexOf(u8, haystack, needle) != null;
 }
 
+/// Gets an array of packages that contain term as a contiguous substring in their name.
+///
+/// **Arguments**
+/// - temp_aloc: An allocator to be used for this operation.
+/// - term:      The substring to search for.
+/// - pckgs:     List of all packages to be matched against the substring.
+///
+/// **Returns**
+/// An error union or a NEW array of packages.
 pub fn fuzzy_find(temp_aloc: std.mem.Allocator, term: []const u8, pckgs: []const pckg) ![]pckg {
 
     if(term.len == 0 or std.mem.eql(u8, term, "\n") or std.mem.eql(u8, term, " ")) {
@@ -56,6 +65,10 @@ pub fn fuzzy_find(temp_aloc: std.mem.Allocator, term: []const u8, pckgs: []const
     return matches.items;
 }
 
+/// Sorts the package list in place by package name.
+///
+/// **Arguments**
+/// - list: The package list to sort.
 pub fn sort_by_pckg_size(list: []db.Package) void {
 
     std.mem.sort(db.Package, list, {}, struct {
@@ -65,6 +78,10 @@ pub fn sort_by_pckg_size(list: []db.Package) void {
     }.greaterThan);
 }
 
+/// Sorts the package list in place by package size.
+///
+/// **Arguments**
+/// - list: The package list to sort.
 pub fn sort_by_pckg_name(list: []db.Package) void {
 
     std.mem.sort(pckg, list, {}, struct {
