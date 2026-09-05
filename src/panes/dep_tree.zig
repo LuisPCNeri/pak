@@ -182,7 +182,7 @@ pub fn render_graph_pane(vx: *vaxis.Vaxis, frame_aloc: std.mem.Allocator, nodes:
         };
 
         if(is_selected and is_active) {
-            seg.style = .{ .dim = false, .bg = .{.index = 6}, .fg = .{.index = 0} };
+            seg.style = .{ .dim = false, .bold = true, .bg = .{.index = 6}, .fg = .{.index = 0} };
         }
 
         _ = win.print(&.{seg}, .{.col_offset = @intCast(pane_x + col), .row_offset = @intCast(pane_y + i)});

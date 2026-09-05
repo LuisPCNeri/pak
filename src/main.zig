@@ -182,7 +182,7 @@ pub fn main(init: std.process.Init) !void {
                         fuzz.sort_by_pckg_name(pckgs_list);
                     }
 
-                    if(key.matches(' ', .{}) and cur_pane == .GRAPH_PANE) {
+                    if( (key.matches(' ', .{}) or key.matches(vaxis.Key.enter, .{})) and cur_pane == .GRAPH_PANE) {
                         if(!tree.items[graph_cursor].is_expanded) {
                             try graph.expand_node(aloc, graph_cursor, &tree, &database);
                         }
