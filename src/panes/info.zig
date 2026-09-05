@@ -21,6 +21,8 @@ fn reverse_resolve_ids(temp_aloc: std.mem.Allocator ,ids: []u32, data: *db.Datab
 
 pub fn draw_pckg_info_pane(vx: *vaxis.Vaxis, temp_aloc: std.mem.Allocator, pckg: db.Package, database: *db.Database, x: u32, w: u32) !void {
 
+    if( w < 10 ) return;
+
     var win = vx.window();
 
     const base_pckg_info: []const u8 = try std.fmt.allocPrint(temp_aloc, "Name: {s}\nVersion: {s}\nDescription: {s}\nSize: {d} {s}",

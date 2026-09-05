@@ -139,6 +139,8 @@ pub fn collapse_node(idx: u32, tree: *std.ArrayList(TreeNode)) !void {
 pub fn render_graph_pane(vx: *vaxis.Vaxis, frame_aloc: std.mem.Allocator, nodes: []TreeNode, database: *db.Database, pane_x: u32, pane_y: u32,
                          cursor: u32, scroll: u32, is_active: bool) !void {
 
+    if(vx.window().width -| pane_x < 10) return;
+
     var win = vx.window();
     const vis = win.height -| 4;
     const vis_u: usize = @intCast(vis);

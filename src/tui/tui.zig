@@ -154,8 +154,8 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
     var win = vx.window();
     win.clear();
 
-    const bar1_x: u32  = (win.width / 4) + 2;           // 25% mark
-    const bar2_x: u32  = (win.width * 6) / 10;      // 60% mark
+    const bar1_x: u32  = (win.width * 3) / 10 + 2;           // 25% mark
+    const bar2_x: u32  = (win.width * 7) / 10;      // 60% mark
     const pane1_w: u32 = bar1_x -| 2;
     const pane2_w: u32 = bar2_x -| bar1_x -| 4;
 

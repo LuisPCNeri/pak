@@ -5,6 +5,7 @@ const db = @import("../db/database.zig");
 pub fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pckgs: []const db.Package, scroll: u32, cursor: u32, w: u32, is_active: bool) !void {
 
     if(pckgs.len <= 0) return;
+    if(w < 10) return;
 
     const frame_aloc = arena.allocator();
 
@@ -25,15 +26,16 @@ pub fn draw_packages_pane(vx: *vaxis.Vaxis, arena: *std.heap.ArenaAllocator, pck
         if(pckg.reason == .dependency and pckg.required_by.len > 0)  pckg_suffix = "[S]";
         if(pckg.reason == .dependency and pckg.required_by.len == 0 and pckg.opt_req_by.len == 0) pckg_suffix = "[!]";
 
+        const w_usize: usize = @intCast(w);
 
-        var row_text = try frame_aloc.alloc(u8, 40);
+        var row_text = try frame_aloc.alloc(u8, w_usize);
         @memset(row_text, ' ');
 
-        const name_len = @min(pckg.name.len, 40);
+        const name_len = @min(pckg.name.len, w_usize -| 1);
         @memcpy(row_text[1..name_len + 1], pckg.name[0..name_len]);
 
         if(pckg.name.len + pckg_suffix.len <= 40 - 1) {
-            const right_start = 40 - pckg_suffix.len;
+            const right_start = w_usize - pckg_suffix.len;
             @memcpy(row_text[(right_start - 1)..(row_text.len - 1)], pckg_suffix);
         }
 
