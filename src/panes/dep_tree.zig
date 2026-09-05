@@ -44,7 +44,7 @@ fn ancestor_is_last(tree: []TreeNode, idx: usize, target_depth: u8) bool {
     return false;
 }
 
-pub fn create_tree_from_root(frame_aloc: std.mem.Allocator ,root: db.Package, database: *db.Database) !std.ArrayList(TreeNode) {
+pub fn create_tree_from_root(frame_aloc: std.mem.Allocator, root: db.Package, database: *db.Database, tree: *std.ArrayList(TreeNode)) !void {
 
     const root_node = TreeNode{
         .pckg_id      = root.id,
@@ -55,7 +55,8 @@ pub fn create_tree_from_root(frame_aloc: std.mem.Allocator ,root: db.Package, da
         .is_optional = false,
     };
 
-    var tree = try std.ArrayList(TreeNode).initCapacity(frame_aloc, 1);
+    if(tree.items.len > 0) tree.clearRetainingCapacity();
+
     try tree.append(frame_aloc, root_node);
 
     for(root.deps) |dep_id| {
@@ -88,8 +89,6 @@ pub fn create_tree_from_root(frame_aloc: std.mem.Allocator ,root: db.Package, da
 
         try tree.append(frame_aloc, node);
     }
-
-    return tree;
 }
 
 pub fn expand_node(frame_aloc: std.mem.Allocator, idx: u32, tree: *std.ArrayList(TreeNode), database: *db.Database) !void {

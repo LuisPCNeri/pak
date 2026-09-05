@@ -263,6 +263,8 @@ pub fn get_pckgs_list(io: std.Io, aloc: std.mem.Allocator) !db.Database {
     var database = try db.Database.init_database(aloc, pckg_count);
 
     var temp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer temp_arena.deinit();
+
     const temp_aloc = temp_arena.allocator();
 
     const raw_deps = try temp_aloc.alloc([][]const u8, pckg_count);

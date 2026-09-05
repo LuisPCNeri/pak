@@ -38,10 +38,16 @@ pub fn main(init: std.process.Init) !void {
     const aloc = arena.allocator();
     defer arena.deinit();
 
+    var db_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer db_arena.deinit();
+
+    var frame_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer frame_arena.deinit();
+
     const io = init.io;
     const map = init.environ_map;
 
-    var database = try parse.get_pckgs_list(io, aloc);
+    var database = try parse.get_pckgs_list(io, db_arena.allocator());
 
     var buff: [1024]u8 = undefined;
     var tty = try vaxis.tty.Tty.init(io, &buff);
@@ -78,9 +84,10 @@ pub fn main(init: std.process.Init) !void {
     var need_refilter: bool      = false;
     var is_size_sorted: bool     = false;
 
-    var pckgs_list = try fuzz.fuzzy_find(aloc, search_buff.items, database.pckgs.items);
+    var pckgs_list = try std.ArrayList(db.Package).initCapacity(aloc, 1);
+    try fuzz.fuzzy_find(aloc, search_buff.items, database.pckgs.items, &pckgs_list);
 
-    var count: u32    = @intCast(pckgs_list.len);
+    var count: u32    = @intCast(pckgs_list.items.len);
 
     max_scroll = @intCast(database.pckgs.items.len);
 
@@ -88,9 +95,10 @@ pub fn main(init: std.process.Init) !void {
     while (is_running) {
         need_refilter = false;
 
-        try tui.render_tui(&vx, &tty, pckgs_list, database.total_size, database.pckgs.capacity, 
+        _ = frame_arena.reset(.free_all);
+        try tui.render_tui(&vx, &tty, pckgs_list.items, database.total_size, database.pckgs.capacity, 
         scroll, cursor, search_buff.items, mode, &database, &tree, cur_pane,
-        graph_cursor, graph_scroll);
+        graph_cursor, graph_scroll, &frame_arena);
 
 
         const event = try loop.nextEvent();
@@ -185,12 +193,23 @@ pub fn main(init: std.process.Init) !void {
                         else cur_pane = @enumFromInt(@intFromEnum(cur_pane) -| 1);
                     }
 
-                    if(key.matches('s', .{}) or key.matches('S', .{})) {
+                    if(key.matches('S', .{})) {
+                        db_arena.deinit();
+                        db_arena = std.heap.ArenaAllocator.init(init.gpa);
+
+                        database = try parse.get_pckgs_list(io, db_arena.allocator());
+                        need_refilter = true;
+
+                        graph_cursor = 0;
+                        graph_scroll = 0;
+                    }
+
+                    if(key.matches('s', .{}))  {
                         is_size_sorted = true;
-                        fuzz.sort_by_pckg_size(pckgs_list);
+                        fuzz.sort_by_pckg_size(pckgs_list.items);
                     }
                     if(key.matches('n', .{}) or key.matches('N', .{})) {
-                        fuzz.sort_by_pckg_name(pckgs_list);
+                        fuzz.sort_by_pckg_name(pckgs_list.items);
                     }
 
                     if( (key.matches(' ', .{}) or key.matches(vaxis.Key.enter, .{})) and cur_pane == .GRAPH_PANE) {
@@ -207,19 +226,23 @@ pub fn main(init: std.process.Init) !void {
         }
 
         if(need_refilter) {
-            pckgs_list = try fuzz.fuzzy_find(aloc, search_buff.items, database.pckgs.items);
+            pckgs_list.clearRetainingCapacity();
+            try fuzz.fuzzy_find(aloc, search_buff.items, database.pckgs.items, &pckgs_list);
 
-            if(pckgs_list.len > 0) {
+            if(pckgs_list.items.len > 0) {
 
-                if (is_size_sorted) fuzz.sort_by_pckg_size(pckgs_list);
+                if (is_size_sorted) fuzz.sort_by_pckg_size(pckgs_list.items);
 
-                count = @intCast(pckgs_list.len);
+                count = @intCast(pckgs_list.items.len);
 
                 // Just so the cursor does not go outside the list.
                 cursor = 0;
+                scroll = 0;
+
                 tree.clearRetainingCapacity();
-                const package = database.pckgs.items[pckgs_list[cursor].id];
-                tree = try graph.create_tree_from_root(aloc, package, &database);
+                const package = database.pckgs.items[pckgs_list.items[cursor].id];
+                try graph.create_tree_from_root(aloc, package, &database, &tree);
+
                 prev_cursor = cursor;
             }
         }
@@ -228,9 +251,9 @@ pub fn main(init: std.process.Init) !void {
         if(cursor != prev_cursor) {
             tree.clearRetainingCapacity();
 
-            if(pckgs_list.len > 0) {
-                const package = database.pckgs.items[pckgs_list[cursor].id];
-                tree = try graph.create_tree_from_root(aloc, package, &database);
+            if(pckgs_list.items.len > 0) {
+                const package = database.pckgs.items[pckgs_list.items[cursor].id];
+                try graph.create_tree_from_root(aloc, package, &database, &tree);
             }
  
             prev_cursor = cursor;

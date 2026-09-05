@@ -101,6 +101,11 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode) !v
         .style = .{.dim = true},
     };
 
+    const sync_seg = vaxis.Segment{
+        .text = "[S]ync ",
+        .style     = .{.dim = true},
+    };
+
     var search_seg = vaxis.Segment{
         .text = "[f]ind ",
         .style     = .{.dim = true},
@@ -139,30 +144,27 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode) !v
         search_seg.style = .{.bold = true};
     }
 
-    _ = footer_win.print(&.{instruction, vert_move_seg, horizontal_mov_Seg, search_seg, name_sort_seg, size_sort_seg, node_op_seg}, .{});
+    _ = footer_win.print(&.{instruction, sync_seg, vert_move_seg, horizontal_mov_Seg, search_seg, name_sort_seg, size_sort_seg, node_op_seg}, .{});
 }
 
 pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, total_size: u64, total_pckgs_amount: u64, scroll: u32, cursor: u32,
                   search_term: []const u8, mode: EditorMode, database: *db.Database, tree: *std.ArrayList(graph_pane.TreeNode), cur_pane: Panes,
-                  graph_cursor: u32, graph_scroll: u32) !void {
+                  graph_cursor: u32, graph_scroll: u32, arena: *std.heap.ArenaAllocator) !void {
 
     var win = vx.window();
     win.clear();
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-
     const bar1_x: u32  = (win.width / 4) + 2;           // 25% mark
-    const bar2_x: u32  = (win.width * 6) / 10;    // 60% mark
+    const bar2_x: u32  = (win.width * 6) / 10;      // 60% mark
     const pane1_w: u32 = bar1_x -| 2;
-    const pane2_w: u32 = bar2_x -| bar1_x -| 2;
+    const pane2_w: u32 = bar2_x -| bar1_x -| 4;
 
 
     draw_vertical_bar(vx, @intCast(bar1_x), 3, vx.window().height -| 1);
     draw_vertical_bar(vx, @intCast(bar2_x), 3, vx.window().height -| 1);
 
     if(cursor >= 0 and cursor < data.len and data.len > 0) {
-        try pckg_list_pane.draw_packages_pane(vx, &arena, data, scroll, cursor, pane1_w, cur_pane == .LIST_PANE);
+        try pckg_list_pane.draw_packages_pane(vx, arena, data, scroll, cursor, pane1_w, cur_pane == .LIST_PANE);
 
         const package: db.Package = database.pckgs.items[data[cursor].id];
         try info_pane.draw_pckg_info_pane(vx, arena.allocator(), package, database, bar1_x + 1, pane2_w);

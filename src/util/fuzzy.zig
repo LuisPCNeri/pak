@@ -3,66 +3,60 @@ const std: type = @import("std");
 const db: type   = @import("../db/database.zig");
 const pckg: type = db.Package;
 
-fn filter_orphans_only(temp_aloc: std.mem.Allocator, pckgs: []const pckg) ![]pckg {
+fn filter_orphans_only(temp_aloc: std.mem.Allocator, pckgs: []const pckg, match_list: *std.ArrayList(pckg)) !void {
 
-    var matches = try std.ArrayList(pckg).initCapacity(temp_aloc, pckgs.len);
-    errdefer matches.deinit(temp_aloc);
+    if(match_list.items.len > 0) match_list.clearRetainingCapacity();
 
     for(pckgs) |package| {
-        if(package.reason == .dependency and package.required_by.len == 0 and package.opt_req_by.len == 0) try matches.append(temp_aloc, package);
+        if(package.reason == .dependency and package.required_by.len == 0 and package.opt_req_by.len == 0) try match_list.append(temp_aloc, package);
     }
 
-    return matches.items;
 }
 
-fn filter_deps_only(temp_aloc: std.mem.Allocator, pckgs: []const pckg) ![]pckg {
+fn filter_deps_only(temp_aloc: std.mem.Allocator, pckgs: []const pckg, match_list: *std.ArrayList(pckg)) !void {
 
-    var matches = try std.ArrayList(pckg).initCapacity(temp_aloc, pckgs.len);
-    errdefer matches.deinit(temp_aloc);
+    if(match_list.items.len > 0) match_list.clearRetainingCapacity();
 
     for(pckgs) |package| {
-        if(package.reason == .dependency and package.required_by.len > 0) try matches.append(temp_aloc, package);
+        if(package.reason == .dependency and package.required_by.len > 0) try match_list.append(temp_aloc, package);
     }
 
-    return matches.items;
 }
 
 fn has_substring(needle: []const u8, haystack: []const u8) bool {
     return std.mem.indexOf(u8, haystack, needle) != null;
 }
 
-/// Gets an array of packages that contain term as a contiguous substring in their name.
+/// Replaces the current match_list with a new one by clearing it and rebuilding it.
 ///
 /// **Arguments**
-/// - temp_aloc: An allocator to be used for this operation.
-/// - term:      The substring to search for.
-/// - pckgs:     List of all packages to be matched against the substring.
-///
-/// **Returns**
-/// An error union or a NEW array of packages.
-pub fn fuzzy_find(temp_aloc: std.mem.Allocator, term: []const u8, pckgs: []const pckg) ![]pckg {
+/// - temp_aloc:  An allocator to be used for this operation.
+/// - term:       The substring to search for.
+/// - pckgs:      List of all packages to be matched against the substring.
+/// - match_list: Pointer to an array list of db.Package which will be cleared and the new list will be built on.
+pub fn fuzzy_find(temp_aloc: std.mem.Allocator, term: []const u8, pckgs: []const pckg, match_list: *std.ArrayList(pckg)) !void {
+
+    if(match_list.items.len > 0) match_list.clearRetainingCapacity();
 
     if(term.len == 0 or std.mem.eql(u8, term, "\n") or std.mem.eql(u8, term, " ")) {
-        return try temp_aloc.dupe(pckg, pckgs);
+        try match_list.appendSlice(temp_aloc, pckgs);
+        return;
     }
 
-    var matches = try std.ArrayList(pckg).initCapacity(temp_aloc, pckgs.len);
-    errdefer matches.deinit(temp_aloc);
-
     if(std.mem.eql(u8, term, "[!]")) {
-        return try filter_orphans_only(temp_aloc, pckgs);
+        try filter_orphans_only(temp_aloc, pckgs, match_list);
+        return;
     }
 
     if(std.mem.eql(u8, term, "[S]")) {
-        return try filter_deps_only(temp_aloc, pckgs);
+        try filter_deps_only(temp_aloc, pckgs, match_list);
+        return;
     }
 
     for(pckgs) |package| {
         if( package.name.len < term.len ) continue;
-        if( has_substring(term, package.name) ) try matches.append(temp_aloc, package);
+        if( has_substring(term, package.name) ) try match_list.append(temp_aloc, package);
     }
-
-    return matches.items;
 }
 
 /// Sorts the package list in place by package name.
