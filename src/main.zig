@@ -229,6 +229,8 @@ pub fn main(init: std.process.Init) !void {
             pckgs_list.clearRetainingCapacity();
             try fuzz.fuzzy_find(aloc, search_buff.items, database.pckgs.items, &pckgs_list);
 
+            cur_pane = .LIST_PANE;
+
             if(pckgs_list.items.len > 0) {
 
                 if (is_size_sorted) fuzz.sort_by_pckg_size(pckgs_list.items);
