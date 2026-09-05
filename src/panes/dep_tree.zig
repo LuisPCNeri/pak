@@ -94,6 +94,10 @@ pub fn create_tree_from_root(frame_aloc: std.mem.Allocator, root: db.Package, da
 pub fn expand_node(frame_aloc: std.mem.Allocator, idx: u32, tree: *std.ArrayList(TreeNode), database: *db.Database) !void {
 
     const node = tree.items[idx];
+
+    // Do not let user expand node if it is a cycle
+    if(node.is_cycle) return;
+
     tree.items[idx].is_expanded = true;
 
     const children     = database.pckgs.items[node.pckg_id].deps;
