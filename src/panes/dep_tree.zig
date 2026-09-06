@@ -2,6 +2,11 @@ const std   = @import("std");
 const db    = @import("../db/database.zig");
 const vaxis: type = @import("vaxis");
 
+pub const GraphMode = enum(u8) {
+    DEP  = 0,
+    RDEP = 1,
+};
+
 pub const TreeNode = struct {
 
     pckg_id:     u32,
@@ -44,7 +49,7 @@ fn ancestor_is_last(tree: []TreeNode, idx: usize, target_depth: u8) bool {
     return false;
 }
 
-pub fn create_tree_from_root(frame_aloc: std.mem.Allocator, root: db.Package, database: *db.Database, tree: *std.ArrayList(TreeNode)) !void {
+pub fn create_tree_from_root(frame_aloc: std.mem.Allocator, root: db.Package, database: *db.Database, tree: *std.ArrayList(TreeNode), mode: GraphMode) !void {
 
     const root_node = TreeNode{
         .pckg_id      = root.id,
@@ -59,7 +64,17 @@ pub fn create_tree_from_root(frame_aloc: std.mem.Allocator, root: db.Package, da
 
     try tree.append(frame_aloc, root_node);
 
-    for(root.deps) |dep_id| {
+    const children = switch (mode) {
+        .DEP  => root.deps,
+        .RDEP => root.required_by,
+    };
+
+    const opt_children = switch (mode) {
+        .DEP  => root.opt_deps_ids,
+        .RDEP => root.opt_req_by,
+    };
+
+    for(children) |dep_id| {
 
         const dep = database.pckgs.items[dep_id];
         const node = TreeNode{
@@ -74,7 +89,7 @@ pub fn create_tree_from_root(frame_aloc: std.mem.Allocator, root: db.Package, da
         try tree.append(frame_aloc, node);
     }
 
-    for(root.opt_deps_ids) |dep_id| {
+    for(opt_children) |dep_id| {
 
         const dep = database.pckgs.items[dep_id];
         const node = TreeNode{
@@ -91,7 +106,7 @@ pub fn create_tree_from_root(frame_aloc: std.mem.Allocator, root: db.Package, da
     }
 }
 
-pub fn expand_node(frame_aloc: std.mem.Allocator, idx: u32, tree: *std.ArrayList(TreeNode), database: *db.Database) !void {
+pub fn expand_node(frame_aloc: std.mem.Allocator, idx: u32, tree: *std.ArrayList(TreeNode), database: *db.Database, mode: GraphMode) !void {
 
     const node = tree.items[idx];
 
@@ -100,8 +115,15 @@ pub fn expand_node(frame_aloc: std.mem.Allocator, idx: u32, tree: *std.ArrayList
 
     tree.items[idx].is_expanded = true;
 
-    const children     = database.pckgs.items[node.pckg_id].deps;
-    const opt_children = database.pckgs.items[node.pckg_id].opt_deps_ids;
+    const children: []u32     = switch (mode) {
+        .DEP  => database.pckgs.items[node.pckg_id].deps,
+        .RDEP => database.pckgs.items[node.pckg_id].required_by,
+    };
+
+    const opt_children: []u32 = switch (mode) {
+        .DEP  => database.pckgs.items[node.pckg_id].opt_deps_ids,
+        .RDEP => database.pckgs.items[node.pckg_id].opt_req_by,
+    };
 
     for(children, (idx + 1)..) |dep_id, in_pos| {
         try tree.insert(frame_aloc, in_pos, .{

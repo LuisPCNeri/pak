@@ -87,7 +87,7 @@ fn render_header(vx: *vaxis.Vaxis, total_pckgs_amount: u64, total_size: u64, fra
     _ = header_win.print(&.{title, pckg_amount_seg, total_size_seg}, .{});
 }
 
-fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode) !void {
+fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode, g_mode: graph_pane.GraphMode) !void {
 
     var win = vx.window();
 
@@ -131,6 +131,27 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode) !v
         .style     = .{ .dim = true },
     };
 
+    var dep_graph_seg = vaxis.Segment{
+        .text = "[D]ep graph ",
+        .style     = .{ .dim = true },
+    };
+
+    var rdep_graph_seg = vaxis.Segment{
+        .text = "[R]everse dep graph ",
+        .style     = .{ .dim = true },
+    };
+
+    switch (g_mode) {
+        .DEP  => {
+            dep_graph_seg.style  = .{ .dim = false, .bold = true, .fg = .{ .index = 215 }};
+            rdep_graph_seg.style = .{ .dim = true, .bold = false, .fg = .default};
+        },
+        .RDEP => {
+            dep_graph_seg.style  =.{ .dim = true, .bold = false, .fg = .default};
+            rdep_graph_seg.style = .{ .dim = false, .bold = true, .fg = .{ .index = 215 }};
+        }
+    }
+
     const node_op_seg = vaxis.Segment{
         .text = "[SPACE] Open/close Graph Node ",
         .style     = .{ .dim = true },
@@ -144,12 +165,13 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode) !v
         search_seg.style = .{.bold = true};
     }
 
-    _ = footer_win.print(&.{instruction, sync_seg, vert_move_seg, horizontal_mov_Seg, search_seg, name_sort_seg, size_sort_seg, node_op_seg}, .{});
+    _ = footer_win.print(&.{instruction, sync_seg, vert_move_seg, horizontal_mov_Seg, 
+        search_seg, name_sort_seg, size_sort_seg, dep_graph_seg, rdep_graph_seg, node_op_seg}, .{});
 }
 
 pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, total_size: u64, total_pckgs_amount: u64, scroll: u32, cursor: u32,
                   search_term: []const u8, mode: EditorMode, database: *db.Database, tree: *std.ArrayList(graph_pane.TreeNode), cur_pane: Panes,
-                  graph_cursor: u32, graph_scroll: u32, arena: *std.heap.ArenaAllocator) !void {
+                  graph_cursor: u32, graph_scroll: u32, arena: *std.heap.ArenaAllocator, g_mode: graph_pane.GraphMode) !void {
 
     var win = vx.window();
     win.clear();
@@ -174,7 +196,7 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
     }
 
     try render_header(vx, total_pckgs_amount, total_size, arena.allocator());
-    try render_footer(vx, search_term, mode);
+    try render_footer(vx, search_term, mode, g_mode);
 
     try vx.render(tty.writer());
 }

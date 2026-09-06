@@ -76,9 +76,10 @@ pub fn main(init: std.process.Init) !void {
     var mode    = tui.EditorMode.NORMAL;
     var prev_cursor: u32 = std.math.maxInt(u32);
 
-    var graph_scroll: u32   = 0;
-    var graph_cursor: u32   = 0;
-    var cur_pane: tui.Panes = tui.Panes.LIST_PANE;
+    var graph_mode: graph.GraphMode = .DEP;
+    var graph_scroll: u32           = 0;
+    var graph_cursor: u32           = 0;
+    var cur_pane: tui.Panes         = tui.Panes.LIST_PANE;
 
     var search_buff = try std.ArrayList(u8).initCapacity(aloc, 255);
     var need_refilter: bool      = false;
@@ -98,7 +99,7 @@ pub fn main(init: std.process.Init) !void {
         _ = frame_arena.reset(.free_all);
         try tui.render_tui(&vx, &tty, pckgs_list.items, database.total_size, database.pckgs.capacity, 
         scroll, cursor, search_buff.items, mode, &database, &tree, cur_pane,
-        graph_cursor, graph_scroll, &frame_arena);
+        graph_cursor, graph_scroll, &frame_arena, graph_mode);
 
 
         const event = try loop.nextEvent();
@@ -193,6 +194,33 @@ pub fn main(init: std.process.Init) !void {
                         else cur_pane = @enumFromInt(@intFromEnum(cur_pane) -| 1);
                     }
 
+                    if(key.matches('D', .{})) {
+                        if(count <= 0) break;
+
+                        graph_cursor = 0;
+                        graph_scroll = 0;
+
+                        graph_mode = .DEP;
+                        tree.clearRetainingCapacity();
+
+                        const package = database.pckgs.items[pckgs_list.items[cursor].id];
+                        try graph.create_tree_from_root(aloc, package, &database, &tree, graph_mode);
+
+                    }
+                    if(key.matches('R', .{})) {
+                        if(count <= 0) break;
+
+                        graph_cursor = 0;
+                        graph_scroll = 0;
+
+                        graph_mode = .RDEP;
+                        tree.clearRetainingCapacity();
+
+                        const package = database.pckgs.items[pckgs_list.items[cursor].id];
+                        try graph.create_tree_from_root(aloc, package, &database, &tree, graph_mode);
+
+                    }
+
                     if(key.matches('S', .{})) {
                         db_arena.deinit();
                         db_arena = std.heap.ArenaAllocator.init(init.gpa);
@@ -214,7 +242,7 @@ pub fn main(init: std.process.Init) !void {
 
                     if( (key.matches(' ', .{}) or key.matches(vaxis.Key.enter, .{})) and cur_pane == .GRAPH_PANE) {
                         if(!tree.items[graph_cursor].is_expanded) {
-                            try graph.expand_node(aloc, graph_cursor, &tree, &database);
+                            try graph.expand_node(aloc, graph_cursor, &tree, &database, graph_mode);
                         }
                         else {
                             try graph.collapse_node(graph_cursor, &tree);
@@ -243,7 +271,7 @@ pub fn main(init: std.process.Init) !void {
 
                 tree.clearRetainingCapacity();
                 const package = database.pckgs.items[pckgs_list.items[cursor].id];
-                try graph.create_tree_from_root(aloc, package, &database, &tree);
+                try graph.create_tree_from_root(aloc, package, &database, &tree, graph_mode);
 
                 prev_cursor = cursor;
             }
@@ -255,7 +283,7 @@ pub fn main(init: std.process.Init) !void {
 
             if(pckgs_list.items.len > 0) {
                 const package = database.pckgs.items[pckgs_list.items[cursor].id];
-                try graph.create_tree_from_root(aloc, package, &database, &tree);
+                try graph.create_tree_from_root(aloc, package, &database, &tree, graph_mode);
             }
  
             prev_cursor = cursor;
