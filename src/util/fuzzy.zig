@@ -23,11 +23,20 @@ fn filter_deps_only(temp_aloc: std.mem.Allocator, pckgs: []const pckg, match_lis
 
 }
 
+fn filter_explicit_only(temp_aloc: std.mem.Allocator, pckgs: []const pckg, match_list: *std.ArrayList(pckg)) !void {
+
+    if(match_list.items.len > 0) match_list.clearRetainingCapacity();
+
+    for(pckgs) |package| {
+        if(package.reason == .explicit) try match_list.append(temp_aloc, package);
+    }
+}
+
 fn has_substring(needle: []const u8, haystack: []const u8) bool {
     return std.mem.indexOf(u8, haystack, needle) != null;
 }
 
-/// Replaces the current match_list with a new one by clearing it and rebuilding it.
+/// Replaces the current match_list with a new one by clearing it and rebuilding it using the search term provided.
 ///
 /// **Arguments**
 /// - temp_aloc:  An allocator to be used for this operation.
@@ -50,6 +59,11 @@ pub fn fuzzy_find(temp_aloc: std.mem.Allocator, term: []const u8, pckgs: []const
 
     if(std.mem.eql(u8, term, "[S]")) {
         try filter_deps_only(temp_aloc, pckgs, match_list);
+        return;
+    }
+
+    if(std.mem.eql(u8, term, "[E]")) {
+        try filter_explicit_only(temp_aloc, pckgs, match_list);
         return;
     }
 
