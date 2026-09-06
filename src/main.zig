@@ -171,7 +171,7 @@ pub fn main(init: std.process.Init) !void {
                     }
 
                     if(key.matches('k', .{}) or key.matches('K', .{})
-                        or key.matches(vaxis.Key.right, .{})) {
+                        or key.matches(vaxis.Key.right, .{}) or key.matches(vaxis.Key.tab, .{})) {
 
                         graph_cursor = 0;
                         graph_scroll = 0;
