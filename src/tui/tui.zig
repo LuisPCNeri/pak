@@ -7,6 +7,7 @@ const search = @import("../util/fuzzy.zig");
 const pckg_list_pane = @import("../panes/package_list.zig");
 const info_pane = @import("../panes/info.zig");
 const graph_pane = @import("../panes/dep_tree.zig");
+const graph = @import("../db/graph.zig");
 
 pub const EditorMode = enum(u8) {
     NORMAL = 0,
@@ -87,7 +88,7 @@ fn render_header(vx: *vaxis.Vaxis, total_pckgs_amount: u64, total_size: u64, fra
     _ = header_win.print(&.{title, pckg_amount_seg, total_size_seg}, .{});
 }
 
-fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode, g_mode: graph_pane.GraphMode) !void {
+fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode, g_mode: graph.GraphMode) !void {
 
     var win = vx.window();
 
@@ -170,8 +171,8 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode, g_
 }
 
 pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, total_size: u64, total_pckgs_amount: u64, scroll: u32, cursor: u32,
-                  search_term: []const u8, mode: EditorMode, database: *db.Database, tree: *std.ArrayList(graph_pane.TreeNode), cur_pane: Panes,
-                  graph_cursor: u32, graph_scroll: u32, arena: *std.heap.ArenaAllocator, g_mode: graph_pane.GraphMode) !void {
+                  search_term: []const u8, mode: EditorMode, database: *db.Database, tree: *std.ArrayList(graph.TreeNode), cur_pane: Panes,
+                  graph_cursor: u32, graph_scroll: u32, arena: *std.heap.ArenaAllocator, g_mode: graph.GraphMode) !void {
 
     var win = vx.window();
     win.clear();

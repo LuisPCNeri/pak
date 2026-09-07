@@ -1,164 +1,9 @@
 const std   = @import("std");
 const db    = @import("../db/database.zig");
 const vaxis: type = @import("vaxis");
+const graph = @import("../db/graph.zig");
 
-pub const GraphMode = enum(u8) {
-    DEP  = 0,
-    RDEP = 1,
-};
-
-pub const TreeNode = struct {
-
-    pckg_id:     u32,
-    depth:       u32,
-    is_expanded: bool,
-    is_shared:   bool,
-    is_cycle:    bool,
-    is_optional: bool,
-
-};
-
-fn is_ancestor(tree: []TreeNode, current_index: usize, pckg_id: u32) bool {
-    const depth = tree[current_index].depth;
-    var i = current_index;
-
-    while( i > 0 ) : (i -= 1) {
-
-        if(tree[i].depth < depth) {
-            if(tree[i].pckg_id == pckg_id) return true;
-        }
-    }
-
-    return false;
-}
-
-fn is_last_sibling(tree: []TreeNode, idx: usize) bool {
-    const depth = tree[idx].depth;
-
-    if(idx + 1 >= tree.len) return true;
-    return tree[idx + 1].depth < depth;
-}
-
-fn ancestor_is_last(tree: []TreeNode, idx: usize, target_depth: u8) bool {
-    var i = idx;
-
-    while( i > 0) : (i -= 1) {
-        if(tree[i].depth == target_depth) return is_last_sibling(tree, i);
-    }
-
-    return false;
-}
-
-pub fn create_tree_from_root(frame_aloc: std.mem.Allocator, root: db.Package, database: *db.Database, tree: *std.ArrayList(TreeNode), mode: GraphMode) !void {
-
-    const root_node = TreeNode{
-        .pckg_id      = root.id,
-        .depth        = 0,
-        .is_expanded = true,
-        .is_shared   = root.required_by.len > 1,
-        .is_cycle    = false,
-        .is_optional = false,
-    };
-
-    if(tree.items.len > 0) tree.clearRetainingCapacity();
-
-    try tree.append(frame_aloc, root_node);
-
-    const children = switch (mode) {
-        .DEP  => root.deps,
-        .RDEP => root.required_by,
-    };
-
-    const opt_children = switch (mode) {
-        .DEP  => root.opt_deps_ids,
-        .RDEP => root.opt_req_by,
-    };
-
-    for(children) |dep_id| {
-
-        const dep = database.pckgs.items[dep_id];
-        const node = TreeNode{
-            .pckg_id      = dep.id,
-            .depth        = root_node.depth + 1,
-            .is_expanded = false,
-            .is_shared   = dep.required_by.len > 1,
-            .is_cycle    = false,
-            .is_optional = false,
-        };
-
-        try tree.append(frame_aloc, node);
-    }
-
-    for(opt_children) |dep_id| {
-
-        const dep = database.pckgs.items[dep_id];
-        const node = TreeNode{
-            .pckg_id      = dep.id,
-            .depth        = root_node.depth + 1,
-            .is_expanded = false,
-            .is_shared   = dep.required_by.len > 1,
-            .is_cycle    = false,
-            .is_optional = true,
-
-        };
-
-        try tree.append(frame_aloc, node);
-    }
-}
-
-pub fn expand_node(frame_aloc: std.mem.Allocator, idx: u32, tree: *std.ArrayList(TreeNode), database: *db.Database, mode: GraphMode) !void {
-
-    const node = tree.items[idx];
-
-    // Do not let user expand node if it is a cycle
-    if(node.is_cycle) return;
-
-    tree.items[idx].is_expanded = true;
-
-    const children: []u32     = switch (mode) {
-        .DEP  => database.pckgs.items[node.pckg_id].deps,
-        .RDEP => database.pckgs.items[node.pckg_id].required_by,
-    };
-
-    const opt_children: []u32 = switch (mode) {
-        .DEP  => database.pckgs.items[node.pckg_id].opt_deps_ids,
-        .RDEP => database.pckgs.items[node.pckg_id].opt_req_by,
-    };
-
-    for(children, (idx + 1)..) |dep_id, in_pos| {
-        try tree.insert(frame_aloc, in_pos, .{
-            .pckg_id      = dep_id,
-            .depth        = node.depth + 1,
-            .is_expanded = false,
-            .is_shared   = database.pckgs.items[dep_id].required_by.len > 1,
-            .is_cycle    = is_ancestor(tree.items, idx, dep_id),
-            .is_optional = false,
-        });
-    }
-
-    for(opt_children, (idx + 1)..) |dep_id, in_pos| {
-        try tree.insert(frame_aloc, in_pos, .{
-            .pckg_id      = dep_id,
-            .depth        = node.depth + 1,
-            .is_expanded = false,
-            .is_shared   = database.pckgs.items[dep_id].required_by.len > 1,
-            .is_cycle    = is_ancestor(tree.items, idx, dep_id),
-            .is_optional = true,
-        });
-    }
-}
-
-pub fn collapse_node(idx: u32, tree: *std.ArrayList(TreeNode)) !void {
-
-    const node = tree.items[idx];
-    tree.items[idx].is_expanded = false;
-
-    while(idx + 1 < tree.items.len and tree.items[idx + 1].depth > node.depth) {
-        _ = tree.orderedRemove(idx + 1);
-    }
-}
-
-pub fn render_graph_pane(vx: *vaxis.Vaxis, frame_aloc: std.mem.Allocator, nodes: []TreeNode, database: *db.Database, pane_x: u32, pane_y: u32,
+pub fn render_graph_pane(vx: *vaxis.Vaxis, frame_aloc: std.mem.Allocator, nodes: []graph.TreeNode, database: *db.Database, pane_x: u32, pane_y: u32,
                          cursor: u32, scroll: u32, is_active: bool) !void {
 
     if(vx.window().width -| pane_x < 10) return;
@@ -182,13 +27,13 @@ pub fn render_graph_pane(vx: *vaxis.Vaxis, frame_aloc: std.mem.Allocator, nodes:
         while(d < node.depth) : (d += 1) {
             if(d == node.depth - 1) {
 
-                const connector = if(is_last_sibling(nodes, scroll + i)) "└─" else "├─";
+                const connector = if(graph.is_last_sibling(nodes, scroll + i)) "└─" else "├─";
                 _ = win.print(&.{.{.text = connector}},
                 .{.col_offset = @intCast(pane_x + col), .row_offset = @intCast(pane_y + i)});
 
             } else {
 
-                const pipe = if(ancestor_is_last(nodes, scroll + i, d + 1)) "  " else "│ ";
+                const pipe = if(graph.ancestor_is_last(nodes, scroll + i, d + 1)) "  " else "│ ";
                 _ = win.print(&.{.{.text = pipe}},
                 .{.col_offset = @intCast(pane_x + col), .row_offset = @intCast(pane_y + i)});
 

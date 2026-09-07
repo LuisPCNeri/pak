@@ -8,7 +8,8 @@ const db    = @import("db/database.zig");
 const parse = @import("db/parse.zig");
 const tui   = @import("tui/tui.zig");
 const fuzz  = @import("util/fuzzy.zig");
-const graph = @import("panes/dep_tree.zig");
+const graph = @import("db/graph.zig");
+const graph_p = @import("panes/dep_tree.zig");
 
 /// Generalized function to move the cursor on any pane.
 ///
