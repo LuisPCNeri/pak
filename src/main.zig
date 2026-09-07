@@ -249,6 +249,16 @@ pub fn main(init: std.process.Init) !void {
                             try graph.collapse_node(graph_cursor, &tree);
                         }
                     }
+
+                    if(key.matches('r', .{})) {
+                        mode = .SIM_OVERLAY;
+                    }
+                }
+
+                if(mode == .SIM_OVERLAY) {
+                    if(key.matches('q', .{}) or key.matches(vaxis.Key.escape, .{})) {
+                        mode = .NORMAL;
+                    }
                 }
             },
             else => {},

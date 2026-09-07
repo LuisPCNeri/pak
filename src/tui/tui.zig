@@ -5,13 +5,15 @@ const db     = @import("../db/database.zig");
 const search = @import("../util/fuzzy.zig");
 
 const pckg_list_pane = @import("../panes/package_list.zig");
-const info_pane = @import("../panes/info.zig");
-const graph_pane = @import("../panes/dep_tree.zig");
-const graph = @import("../db/graph.zig");
+const info_pane      = @import("../panes/info.zig");
+const graph_pane     = @import("../panes/dep_tree.zig");
+const graph          = @import("../db/graph.zig");
+const rsim           = @import("../panes/remove_sim.zig");
 
 pub const EditorMode = enum(u8) {
-    NORMAL = 0,
-    SEARCH = 1,
+    NORMAL      = 0,
+    SEARCH      = 1,
+    SIM_OVERLAY = 2,
 };
 
 pub const Panes = enum(u8) {
@@ -158,6 +160,11 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode, g_
         .style     = .{ .dim = true },
     };
 
+    const rsim_seg = vaxis.Segment{
+        .text = "[r]emove sim",
+        .style = .{ .dim = true },
+    };
+
     if(search_term.len > 0 or mode == .SEARCH) {
         var search_slice_buf: [255]u8 = undefined;
         const search_slice = try std.fmt.bufPrint(&search_slice_buf, "[f]ind: {s} | ", .{search_term});
@@ -167,7 +174,7 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode, g_
     }
 
     _ = footer_win.print(&.{instruction, sync_seg, vert_move_seg, horizontal_mov_Seg, 
-        search_seg, name_sort_seg, size_sort_seg, dep_graph_seg, rdep_graph_seg, node_op_seg}, .{});
+        search_seg, name_sort_seg, size_sort_seg, dep_graph_seg, rdep_graph_seg, node_op_seg, rsim_seg}, .{});
 }
 
 pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, total_size: u64, total_pckgs_amount: u64, scroll: u32, cursor: u32,
@@ -194,6 +201,10 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
 
         try graph_pane.render_graph_pane(vx, arena.allocator(), tree.items, database, bar2_x + 2, 3,
                                         graph_cursor, graph_scroll, cur_pane == .GRAPH_PANE);
+    }
+
+    if(mode == .SIM_OVERLAY) {
+        try rsim.render_rsim_overlay(vx, data[cursor].id, database, arena.allocator());
     }
 
     try render_header(vx, total_pckgs_amount, total_size, arena.allocator());
