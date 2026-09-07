@@ -134,5 +134,5 @@ pub fn render_rsim_overlay(vx: *vaxis.Vaxis, pckg_id: u32, database: *db.Databas
         row += @as(u32, res.row) + 2;
     }
 
-    return row - 10;
+    return row -| 10;
 }
