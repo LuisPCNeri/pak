@@ -179,7 +179,7 @@ fn render_footer(vx: *vaxis.Vaxis, search_term: []const u8, mode: EditorMode, g_
 
 pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, total_size: u64, total_pckgs_amount: u64, scroll: u32, cursor: u32,
                   search_term: []const u8, mode: EditorMode, database: *db.Database, tree: *std.ArrayList(graph.TreeNode), cur_pane: Panes,
-                  graph_cursor: u32, graph_scroll: u32, arena: *std.heap.ArenaAllocator, g_mode: graph.GraphMode) !void {
+                  graph_cursor: u32, graph_scroll: u32, arena: *std.heap.ArenaAllocator, g_mode: graph.GraphMode, overlay_scroll: u32, overlay_max_scroll: *u32) !void {
 
     var win = vx.window();
     win.clear();
@@ -204,7 +204,7 @@ pub fn render_tui(vx: *vaxis.Vaxis, tty: *vaxis.Tty, data: []const db.Package, t
     }
 
     if(mode == .SIM_OVERLAY) {
-        try rsim.render_rsim_overlay(vx, data[cursor].id, database, arena.allocator());
+       overlay_max_scroll.* = try rsim.render_rsim_overlay(vx, data[cursor].id, database, arena.allocator(), overlay_scroll);
     }
 
     try render_header(vx, total_pckgs_amount, total_size, arena.allocator());

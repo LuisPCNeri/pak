@@ -20,9 +20,10 @@ fn reverse_resolve_ids(temp_aloc: std.mem.Allocator ,ids: []u32, data: *db.Datab
     return result;
 }
 
-pub fn render_rsim_overlay(vx: *vaxis.Vaxis, pckg_id: u32, database: *db.Database, aloc: std.mem.Allocator) !void {
+pub fn render_rsim_overlay(vx: *vaxis.Vaxis, pckg_id: u32, database: *db.Database, aloc: std.mem.Allocator, scroll: u32) !u32 {
 
     const package = database.pckgs.items[pckg_id];
+    const is_required = (package.reason == .dependency and package.required_by.len > 0);
 
     var win = vx.window();
     const overlay = win.child(.{
@@ -35,11 +36,34 @@ pub fn render_rsim_overlay(vx: *vaxis.Vaxis, pckg_id: u32, database: *db.Databas
 
     overlay.fill(.{ .style = .{ .bg = .{ .index = 234 } } });
 
+    const viewport = overlay.child(.{
+        .x_off = 1,
+        .y_off = 1,
+        .width = overlay.width -| 2,
+        .height = overlay.height -| 2,
+    });
+
+    const scroll_offset = -@as(i16, @intCast(scroll));
+    const canvas = viewport.child(.{
+        .x_off = 0,
+        .y_off = scroll_offset,
+        .width = viewport.width,
+        .height = 1000, // Large enough to prevent printSegment from truncating text early
+    });
+
 
     var lines = try std.ArrayList([]const u8).initCapacity(aloc, 1);
     defer lines.deinit(aloc);
 
     try lines.append(aloc, try std.fmt.allocPrint(aloc, "Removal Sim for: {s}", .{package.name}));
+
+    if(is_required) {
+        const prefix       = try std.fmt.allocPrint(aloc, "Still required by ({d}): ", .{package.required_by.len});
+        const req_by = try reverse_resolve_ids(aloc, package.required_by, database, prefix);
+
+        try lines.append(aloc, req_by);
+        try lines.append(aloc, "[!] Package is still required by others. Force delete yields: ");
+    }
 
     const size = try ets.exclusive_transitive_size(pckg_id, database, aloc);
     var size_f: f64 = @floatFromInt(size);
@@ -65,16 +89,16 @@ pub fn render_rsim_overlay(vx: *vaxis.Vaxis, pckg_id: u32, database: *db.Databas
 
     try lines.append(aloc, rem_deps);
 
-    var row: u32 = 1;
+    var row: u32 = 0;
     for(lines.items) |line| {
 
-        if(row == 3) {
+        if(row == 2) {
             row -= 1;
 
             var col: u16 = 0;
-            while (col < overlay.width -| 2) : (col += 1) {
+            while (col < canvas.width -| 2) : (col += 1) {
 
-                const cell = overlay.child(.{
+                const cell = canvas.child(.{
                     .x_off = 1 + col,
                     .y_off = @intCast(row),
                     .width = 1,
@@ -87,13 +111,28 @@ pub fn render_rsim_overlay(vx: *vaxis.Vaxis, pckg_id: u32, database: *db.Databas
         }
 
         const row_u16: u16 = @intCast(row);
-        const w = overlay.child(.{
-            .height = overlay.height -| row_u16 -| 1, .width = overlay.width -| 4,
-            .x_off   = 2, .y_off  = @intCast(row),
+        const w = canvas.child(.{
+            .height = canvas.height -| row_u16 -| 1, 
+            .width  = canvas.width -| 4,
+            .x_off   = 2, 
+            .y_off  = @intCast(row),
         });
 
-        _ = w.printSegment(.{.text = line, .style = .{ .bg = .{ .index = 234 } }}, .{.wrap = .word});
-        row += 2;
+        var line_seg = vaxis.Segment{
+            .text = line,
+            .style = .{ .bg = .{ .index = 234 } },
+        };
+
+        if(row == 0) line_seg.style.bold = true;
+
+        if (std.mem.startsWith(u8, line, "[!]")) {
+            line_seg.style.fg = .{ .index = 215 };
+            line_seg.style.bold = true;
+        }
+
+        const res = w.printSegment(line_seg, .{.wrap = .word});
+        row += @as(u32, res.row) + 2;
     }
 
+    return row - 10;
 }

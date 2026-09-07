@@ -82,6 +82,9 @@ pub fn main(init: std.process.Init) !void {
     var graph_cursor: u32           = 0;
     var cur_pane: tui.Panes         = tui.Panes.LIST_PANE;
 
+    var overlay_scroll: u32     = 0;
+    var overlay_max_scroll: u32 = 0;
+
     var search_buff = try std.ArrayList(u8).initCapacity(aloc, 255);
     var need_refilter: bool      = false;
     var is_size_sorted: bool     = false;
@@ -100,7 +103,7 @@ pub fn main(init: std.process.Init) !void {
         _ = frame_arena.reset(.free_all);
         try tui.render_tui(&vx, &tty, pckgs_list.items, database.total_size, database.pckgs.capacity, 
         scroll, cursor, search_buff.items, mode, &database, &tree, cur_pane,
-        graph_cursor, graph_scroll, &frame_arena, graph_mode);
+        graph_cursor, graph_scroll, &frame_arena, graph_mode, overlay_scroll, &overlay_max_scroll);
 
 
         const event = try loop.nextEvent();
@@ -258,6 +261,13 @@ pub fn main(init: std.process.Init) !void {
                 if(mode == .SIM_OVERLAY) {
                     if(key.matches('q', .{}) or key.matches(vaxis.Key.escape, .{})) {
                         mode = .NORMAL;
+                    }
+
+                    if(key.matches(vaxis.Key.down, .{}) or key.matches('j', .{})) {
+                        if(overlay_scroll < overlay_max_scroll) overlay_scroll +|= 1;
+                    }
+                    if(key.matches(vaxis.Key.up, .{}) or key.matches('k', .{})) {
+                        overlay_scroll -|= 1;
                     }
                 }
             },
