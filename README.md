@@ -4,7 +4,7 @@ A read-only, interactive TUI explorer for the Arch Linux package database. Writt
 
 `pak` answers the questions pacman makes awkward: *what does this package actually pull in? what breaks if I remove it? which packages are orphaned on my system?* It reads directly from `/var/lib/pacman/local/` — no subprocess calls to pacman, no network, nothing written to your system.
 
-> **Status:** Active development. The core parse pipeline, dependency graph, package list pane, info panel, and dep tree are working. Remove simulation and file ownership features are planned.
+> **Status:** Active development. The core parse pipeline, dependency graph, package list pane, info panel, dep tree, and remove simulation overlay are working. File ownership and per-package file list features are planned.
 
 ---
 
@@ -31,14 +31,17 @@ pacman -Rns --print cmake  # simulate removal, no context
 - `required_by` and `opt_req_by` reverse-dependency graphs
 - Orphan detection (dep packages with no `required_by` and no `opt_req_by`)
 - Three-pane TUI: package list | info panel | dep tree
-- Package list with substring filter, orphan filter (`[!]`), dep filter (`[S]`), sort by name or size
+- Package list with substring filter, orphan filter (`[!]`), dep filter (`[S]`), explicit-only filter (`[E]`), sort by name or size
 - Info panel: name, version, description, size, deps, optional deps, required-by, opt-required-by
 - Collapsible dependency tree with cycle detection, shared-package marking, and optional-dep distinction
+- Toggle between dependency and reverse dependency tree views (`D` / `R`)
+- Remove simulation overlay with exclusive transitive size calculation (`r`)
+- Warning when simulating deletion of a package that is still required
+- Scrolling support in the remove simulation overlay
 - Live terminal resize via `SIGWINCH`
 
 ## What's planned
 
-- Remove simulation overlay (exclusive transitive size, packages that would be reclaimed)
 - Per-package file list with filter (`files` parse)
 - Global file owner search (`/usr/lib/libSDL2.so → sdl2`)
 - Clipboard yank for simulated `pacman -Rns` command
@@ -95,7 +98,7 @@ pak | 1247 packages | Total Size: 8.43 GiB
               │                           │
               │ Required By: gcc-libs     │
 ──────────────┴───────────────────────────┴──────────────────────────────────
-[q]uit  [↑/↓] Scroll  [←/→] Switch Pane  [f]ind  [n]ame sort  [s]ize sort  [SPACE] Open/close Graph Node
+[↓] Scroll  [Tab] Switch Pane  [←/→] Switch Pane  [f]ind  [n]ame sort  [s]ize sort  [D]ep / [R]ev Dep  [SPACE] Open/close Graph Node  [r] Remove Sim
 ```
 
 Pane proportions: 25% (package list) | 35% (info) | 40% (dep tree). The info panel always tracks the selected package and is not directly focusable — focus switches between the list and the dep tree.
@@ -108,15 +111,18 @@ Pane proportions: 25% (package list) | 35% (info) | 40% (dep tree). The info pan
 |---|---|
 | `↑` / `↓` | Move cursor in the active pane |
 | `Page Up` / `Page Down` | Move cursor by 10 |
-| `←` / `→` or `j` / `k` | Switch active pane |
+| `←` / `→` or `j` / `k` or `Tab` | Switch active pane |
 | `f` | Enter search/filter mode |
-| `Esc` | Exit search mode and clear filter |
+| `Esc` | Exit search mode and clear filter / Close overlay |
 | `Enter` | Confirm search (stay filtered, return to normal mode) |
 | `Backspace` | Delete last character in filter |
 | `Space` or `Enter` | Expand / collapse node in dep tree |
+| `D` | Show dependency tree graph |
+| `R` | Show reverse dependency tree graph |
 | `s` | Sort package list by size (largest first) |
 | `n` | Sort package list by name |
-| `q` | Quit |
+| `r` | Open remove simulation overlay |
+| `q` | Close overlay / Quit |
 
 ---
 
@@ -132,12 +138,13 @@ Pane proportions: 25% (package list) | 35% (info) | 40% (dep tree). The info pan
 
 ## Filter syntax
 
-Type after pressing `f`. The filter is a **substring match** on package names. Two special filters also work:
+Type after pressing `f`. The filter is a **substring match** on package names. Special filters also work:
 
 | Term | Effect |
 |---|---|
 | `[!]` | Show only orphaned packages |
 | `[S]` | Show only dependency-installed packages that are still required |
+| `[E]` | Show only explicitly installed packages |
 
 Press `Esc` to clear the filter and return to the full list.
 
@@ -145,7 +152,7 @@ Press `Esc` to clear the filter and return to the full list.
 
 ## Dep tree
 
-The dep tree on the right tracks the selected package in real time. It shows both required and optional dependencies. Optional deps are rendered **dimmed**.
+The dep tree on the right tracks the selected package in real time. Press `D` to show the dependency tree or `R` to show the reverse dependency tree. It shows both required and optional dependencies. Optional deps are rendered **dimmed**.
 
 | Indicator | Meaning |
 |---|---|
@@ -166,15 +173,21 @@ pak/
 │   ├── main.zig                ← entry point, event loop, input handling
 │   ├── db/
 │   │   ├── database.zig        ← Package and Database structs
+│   │   ├── graph.zig           ← tree creation, expanding, collapsing logic
+│   │   ├── algorithms.zig      ← exclusive transitive size algorithm
 │   │   └── parse.zig           ← five-pass parse pipeline
 │   ├── tui/
 │   │   └── tui.zig             ← layout, header, footer, render orchestration
 │   ├── panes/
 │   │   ├── package_list.zig    ← left pane
 │   │   ├── info.zig            ← middle pane
-│   │   └── dep_tree.zig        ← right pane: collapsible dep tree
+│   │   ├── dep_tree.zig        ← dep tree rendering
+│   │   ├── remove_sim.zig      ← remove simulation overlay
+│   │   ├── file_list.zig       ← file list pane
+│   │   └── file_search.zig     ← file search pane
 │   └── util/
-│       └── fuzzy.zig           ← substring filter, special filters, sort
+│       ├── fuzzy.zig           ← substring filter, special filters, sort
+│       └── intern.zig          ← interning utilities
 ├── build.zig
 └── build.zig.zon               ← vaxis dependency
 ```
