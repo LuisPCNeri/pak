@@ -25,9 +25,18 @@ pub fn draw_pckg_info_pane(vx: *vaxis.Vaxis, temp_aloc: std.mem.Allocator, pckg:
 
     var win = vx.window();
 
-    const base_pckg_info: []const u8 = try std.fmt.allocPrint(temp_aloc, "Name: {s}\nVersion: {s}\nDescription: {s}\nSize: {d} {s}",
-                                                                .{pckg.name, pckg.version, pckg.desc, if (pckg.size > 1024) pckg.size / 1024 else pckg.size,
-                                                                        if (pckg.size > 1024) "KiB" else "Bytes"});
+    const suffixes = [_][]const u8 {"KiB", "MiB", "GiB"};
+    var size: f64          = @floatFromInt(pckg.size);
+    var suffix: []const u8 = "B";
+
+    var i: usize = 0;
+    while(size > 1024 and i < 3) : (i += 1) {
+        size /= 1024;
+        suffix = suffixes[i];
+    }
+
+    const base_pckg_info: []const u8 = try std.fmt.allocPrint(temp_aloc, "Name: {s}\nVersion: {s}\nDescription: {s}\nSize: {d:.2} {s}",
+                                                                .{pckg.name, pckg.version, pckg.desc, size, suffix});
 
     const pckg_deps       = try reverse_resolve_ids(temp_aloc, pckg.deps, database, "Dependencies: ");
     const pckg_opt_deps   = try reverse_resolve_ids(temp_aloc, pckg.opt_deps_ids, database, "Opt Depends: ");
