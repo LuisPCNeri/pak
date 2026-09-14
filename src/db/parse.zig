@@ -193,10 +193,20 @@ fn resolve_pckg_deps(pckg_list: *std.ArrayList(pckg), raw_deps: [][][]const u8 ,
             const dep_id = names_index.get(dep_name)
                 orelse blk: {
                 const providers = provides_index.get(dep_name) orelse continue;
+                const want_lib32 = std.mem.startsWith(u8, pak.name, "lib32-");
+
+                var selected = providers[0];
+
                 for(providers[1..]) |provider_id| {
-                    try req_by_buf[provider_id].append(temp_aloc, provider_id);
+                    const p_name = pckg_list.items[provider_id].name;
+                    const is_lib32 = std.mem.startsWith(u8, p_name, "lib32-");
+
+                    if(is_lib32 == want_lib32) {
+                        selected = provider_id;
+                        break;
+                    }
                 }
-                break :blk providers[0];
+                break :blk selected;
             };
 
             try deps_buf.append(temp_aloc, dep_id);
@@ -218,10 +228,20 @@ fn resolve_pckg_deps(pckg_list: *std.ArrayList(pckg), raw_deps: [][][]const u8 ,
             const dep_id = names_index.get(dep_name)
                 orelse blk: {
                 const providers = provides_index.get(dep_name) orelse continue;
+                const want_lib32 = std.mem.startsWith(u8, pak.name, "lib32-");
+
+                var selected = providers[0];
+
                 for(providers[1..]) |provider_id| {
-                    try req_by_buf[provider_id].append(temp_aloc, provider_id);
+                    const p_name = pckg_list.items[provider_id].name;
+                    const is_lib32 = std.mem.startsWith(u8, p_name, "lib32-");
+
+                    if(is_lib32 == want_lib32) {
+                        selected = provider_id;
+                        break;
+                    }
                 }
-                break :blk providers[0];
+                break :blk selected;
             };
 
             try opt_deps_buf.append(temp_aloc, dep_id);

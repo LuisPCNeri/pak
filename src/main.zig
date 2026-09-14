@@ -255,6 +255,7 @@ pub fn main(init: std.process.Init) !void {
 
                     if(key.matches('r', .{})) {
                         mode = .SIM_OVERLAY;
+                        overlay_scroll = 0;
                     }
                 }
 

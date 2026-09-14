@@ -39,12 +39,6 @@ fn get_exclusive(root_pckg_id: u32 ,closure: *std.DynamicBitSet, exclusive: *std
 
             const package = database.pckgs.items[id];
 
-            if(package.reason == .explicit) {
-                closure.unset(id_u);
-                changed = true;
-                continue;
-            }
-
             var required_outside = false;
             for(package.required_by) |rev_dep| {
                 if(!closure.isSet(@intCast(rev_dep))) {
